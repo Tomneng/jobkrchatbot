@@ -35,3 +35,8 @@ out/
 
 ### VS Code ###
 .vscode/
+
+# 환경별 설정 파일 (API 키 포함)
+application-local.yml
+application-dev.yml
+application-prod.yml
