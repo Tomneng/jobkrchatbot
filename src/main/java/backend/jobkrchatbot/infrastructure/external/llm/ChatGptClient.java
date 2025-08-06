@@ -27,7 +27,7 @@ public class ChatGptClient implements LlmClient {
     @Value("${openai.api.url}")
     private String apiUrl;
 
-    @Value("${openai.model}")
+    @Value("${openai.api.model}")
     private String model;
 
     @Override

@@ -25,7 +25,7 @@ public class OpenAiService {
     @Value("${openai.api.url}")
     private String apiUrl;
 
-    @Value("${openai.model}")
+    @Value("${openai.api.model}")
     private String model;
 
     public String callOpenAI(String userPrompt, String systemPrompt, int maxTokens) {

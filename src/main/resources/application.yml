@@ -3,6 +3,28 @@ spring:
     name: jobkrchatbot
   profiles:
     active: local
+  
+  # 환경변수 파일 로드
+  config:
+    import: optional:file:${user.dir}/env.properties
+  
+  # PostgreSQL 데이터베이스 설정
+  datasource:
+    url: jdbc:postgresql://localhost:5432/chatbot
+    username: postgres
+    password: 1234
+    driver-class-name: org.postgresql.Driver
+  
+  # JPA 설정
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
 
 # OpenAI API 설정
 openai:

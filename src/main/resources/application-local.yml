@@ -1,13 +1,9 @@
-# 로컬 개발 환경 설정
-server:
-  port: 8080
+# 로컬 환경 설정
+spring:
+  application:
+    name: jobkrchatbot
 
-logging:
-  level:
-    backend.jobkrchatbot: DEBUG
-    org.springframework.web: DEBUG
-
-# OpenAI API 설정 (로컬)
+# OpenAI API 설정 (로컬 환경)
 openai:
   api:
     key: ${OPENAI_API_KEY:your-openai-api-key-here}

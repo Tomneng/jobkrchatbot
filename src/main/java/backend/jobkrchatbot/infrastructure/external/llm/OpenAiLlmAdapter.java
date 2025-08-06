@@ -12,6 +12,12 @@ public class OpenAiLlmAdapter implements LlmPort {
 
     private final InterviewQuestionGenerator interviewQuestionGenerator;
     private final LearningPathGenerator learningPathGenerator;
+    private final ChatGptClient chatGptClient;
+
+    @Override
+    public String generateResponse(String prompt, String systemMessage) {
+        return chatGptClient.generateResponse(prompt, systemMessage);
+    }
 
     @Override
     public String generateInterviewQuestions(String resumeInfo) {

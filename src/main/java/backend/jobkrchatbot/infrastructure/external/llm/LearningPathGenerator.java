@@ -25,7 +25,7 @@ public class LearningPathGenerator {
     @Value("${openai.api.url}")
     private String apiUrl;
 
-    @Value("${openai.model}")
+    @Value("${openai.api.model}")
     private String model;
 
     public String generateLearningPath(String resumeInfo) {
@@ -113,4 +113,4 @@ public class LearningPathGenerator {
             return "API 호출 중 오류가 발생했습니다.";
         }
     }
-} 
+}
