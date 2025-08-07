@@ -15,7 +15,7 @@ import java.util.Map;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class OpenAiService {
+public class HttpLlmService {
 
     private final RestTemplate restTemplate;
 
@@ -28,31 +28,42 @@ public class OpenAiService {
     @Value("${openai.api.model}")
     private String model;
 
-    public String callOpenAI(String userPrompt, String systemPrompt, int maxTokens) {
+    public String callLlmApi(String userPrompt, String systemPrompt, int maxTokens, double temperature) {
         try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(apiKey);
-
-            Map<String, Object> requestBody = Map.of(
-                "model", model,
-                "messages", List.of(
-                    Map.of("role", "system", "content", systemPrompt),
-                    Map.of("role", "user", "content", userPrompt)
-                ),
-                "max_tokens", maxTokens,
-                "temperature", 0.7
-            );
-
+            HttpHeaders headers = createHeaders();
+            Map<String, Object> requestBody = createRequestBody(userPrompt, systemPrompt, maxTokens, temperature);
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
-            Map<String, Object> response = restTemplate.postForObject(apiUrl, request, Map.class);
 
+            Map response = restTemplate.postForObject(apiUrl, request, Map.class);
             return extractContentFromResponse(response);
 
         } catch (Exception e) {
-            log.error("Error calling OpenAI API", e);
+            log.error("Error calling LLM API", e);
             return "API 호출 중 오류가 발생했습니다.";
         }
+    }
+
+    public String callLlmApi(String userPrompt, String systemPrompt) {
+        return callLlmApi(userPrompt, systemPrompt, 1000, 0.7);
+    }
+
+    private HttpHeaders createHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(apiKey);
+        return headers;
+    }
+
+    private Map<String, Object> createRequestBody(String userPrompt, String systemPrompt, int maxTokens, double temperature) {
+        return Map.of(
+            "model", model,
+            "messages", List.of(
+                Map.of("role", "system", "content", systemPrompt),
+                Map.of("role", "user", "content", userPrompt)
+            ),
+            "max_tokens", maxTokens,
+            "temperature", temperature
+        );
     }
 
     private String extractContentFromResponse(Map<String, Object> response) {
@@ -65,7 +76,7 @@ public class OpenAiService {
             }
         }
 
-        log.error("Failed to get response from OpenAI API: {}", response);
+        log.error("Failed to get response from LLM API: {}", response);
         return "응답 생성 중 오류가 발생했습니다.";
     }
 } 
