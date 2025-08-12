@@ -1,1 +1,6 @@
-rootProject.name = 'jobkrchatbot'
+rootProject.name = 'jobkrchatbot-msa'
+
+include 'chat-service'
+include 'llm-service'
+include 'user-service'
+include 'common-lib'

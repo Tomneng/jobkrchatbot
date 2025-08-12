@@ -10,22 +10,11 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class OpenAiLlmAdapter implements LlmPort {
 
-    private final InterviewQuestionGenerator interviewQuestionGenerator;
-    private final LearningPathGenerator learningPathGenerator;
-    private final ChatGptClient chatGptClient;
+    private final LlmClient llmClient;
 
     @Override
     public String generateResponse(String prompt, String systemMessage) {
-        return chatGptClient.generateResponse(prompt, systemMessage);
+        return llmClient.generateResponse(prompt, systemMessage);
     }
 
-    @Override
-    public String generateInterviewQuestions(String resumeInfo) {
-        return interviewQuestionGenerator.generateInterviewQuestions(resumeInfo);
-    }
-
-    @Override
-    public String generateLearningPath(String resumeInfo) {
-        return learningPathGenerator.generateLearningPath(resumeInfo);
-    }
 } 

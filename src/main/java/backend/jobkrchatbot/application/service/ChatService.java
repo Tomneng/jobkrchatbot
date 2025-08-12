@@ -2,8 +2,7 @@ package backend.jobkrchatbot.application.service;
 
 import backend.jobkrchatbot.application.dto.ChatRequest;
 import backend.jobkrchatbot.application.dto.ChatResponse;
-import backend.jobkrchatbot.application.port.LlmPort;
-import backend.jobkrchatbot.domain.entity.Resume;
+import backend.jobkrchatbot.domain.service.LlmService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class ChatService {
 
-    private final LlmPort llmPort;
+    private final LlmService llmService;
     
     // 채팅방별 히스토리를 메모리에 저장 (실제 운영에서는 Redis나 DB 사용 권장)
     private final Map<String, List<String>> chatHistories = new ConcurrentHashMap<>();
@@ -41,8 +40,8 @@ public class ChatService {
                 systemMessage = "당신은 취업 상담을 도와주는 전문가입니다. 이전 대화 내용을 참고하여 일관성 있는 답변을 제공해주세요.";
             }
             
-            // LLM을 통한 응답 생성
-            String response = llmPort.generateResponse(request.getMessage(), systemMessage);
+            // 도메인 서비스를 통한 응답 생성
+            String response = llmService.generateChatResponse(request.getMessage(), systemMessage);
             
             // 응답을 히스토리에 추가
             chatHistory.add("Assistant: " + response);
