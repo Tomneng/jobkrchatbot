@@ -2,6 +2,10 @@ package backend.jobkrchatbot.application.service;
 
 import backend.jobkrchatbot.application.dto.ChatRequest;
 import backend.jobkrchatbot.application.dto.ChatResponse;
+<<<<<<< HEAD
+=======
+import backend.jobkrchatbot.domain.model.LlmPrompt;
+>>>>>>> c03c19066653ad63ce423430e01af23d6cd7f95c
 import backend.jobkrchatbot.domain.service.LlmService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,15 +37,19 @@ public class ChatService {
             // 첫 메시지인지 확인
             boolean isFirstMessage = chatHistory.size() == 1;
             
-            String systemMessage;
-            if (isFirstMessage) {
-                systemMessage = "당신은 취업 상담을 도와주는 전문가입니다. 사용자의 이력서 정보를 바탕으로 맞춤형 조언을 제공해주세요.";
-            } else {
-                systemMessage = "당신은 취업 상담을 도와주는 전문가입니다. 이전 대화 내용을 참고하여 일관성 있는 답변을 제공해주세요.";
-            }
+            // 의도 분석 및 시스템 메시지 생성
+            String systemMessage = LlmPrompt.generateSystemMessage(request.getMessage(), isFirstMessage);
             
+<<<<<<< HEAD
             // 도메인 서비스를 통한 응답 생성
             String response = llmService.generateChatResponse(request.getMessage(), systemMessage);
+=======
+            // RAG 방식: 채팅 히스토리와 시스템 메시지를 조합
+            String contextWithHistory = buildContextWithHistory(chatHistory, systemMessage);
+            
+            // 도메인 서비스를 통한 응답 생성
+            String response = llmService.generateChatResponse(request.getMessage(), contextWithHistory);
+>>>>>>> c03c19066653ad63ce423430e01af23d6cd7f95c
             
             // 응답을 히스토리에 추가
             chatHistory.add("Assistant: " + response);
@@ -64,6 +72,24 @@ public class ChatService {
                     .chatRoomId(chatRoomId)
                     .build();
         }
+    }
+    
+    /**
+     * 채팅 히스토리와 시스템 메시지를 조합하여 RAG 컨텍스트 생성
+     */
+    private String buildContextWithHistory(List<String> chatHistory, String systemMessage) {
+        StringBuilder context = new StringBuilder();
+        context.append(systemMessage).append("\n\n");
+        
+        // 이전 대화 히스토리 추가 (최근 5개 대화만 포함)
+        int startIndex = Math.max(0, chatHistory.size() - 10);
+        for (int i = startIndex; i < chatHistory.size(); i++) {
+            context.append(chatHistory.get(i)).append("\n");
+        }
+        
+        context.append("\n위의 대화 내용을 참고하여 사용자의 질문에 답변해주세요.");
+        
+        return context.toString();
     }
     
     public ChatResponse getChatHistory(String chatRoomId) {
