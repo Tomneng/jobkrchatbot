@@ -2,7 +2,7 @@ package backend.jobkrchatbot.llmservice.service;
 
 import backend.jobkrchatbot.common.dto.LlmRequest;
 import backend.jobkrchatbot.common.dto.LlmResponse;
-import backend.jobkrchatbot.llmservice.infrastructure.ClaudeClient;
+import backend.jobkrchatbot.llmservice.infrastructure.GptClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -14,7 +14,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class LlmService {
 
-    private final ClaudeClient claudeClient;
+    private final GptClient gptClient;
     private final KafkaTemplate<String, LlmResponse> kafkaTemplate;
     
     private static final String LLM_RESPONSE_TOPIC = "llm.responses";
@@ -41,8 +41,8 @@ public class LlmService {
                 }
             }
             
-            // Claude API 호출
-            String response = claudeClient.generateResponse(userMessage, "You are a helpful AI assistant.");
+            // GPT API 호출
+            String response = gptClient.generateResponse(userMessage, "You are a helpful AI assistant.");
             
             // 응답 생성
             LlmResponse llmResponse = LlmResponse.builder()
@@ -63,7 +63,7 @@ public class LlmService {
 
     public LlmResponse generateResponse(LlmRequest request) {
         try {
-            String response = claudeClient.generateResponse(request.getUserMessage(), request.getSystemMessage());
+            String response = gptClient.generateResponse(request.getUserMessage(), request.getSystemMessage());
             
             return LlmResponse.builder()
                     .response(response)
