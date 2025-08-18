@@ -39,10 +39,11 @@ public class ChatController {
         return ResponseEntity.ok(response);
     }
     
-    @PostMapping(value = "/message/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter sendStreamingMessage(@RequestBody SendMessageRequest request) {
+    @PostMapping("/message/stream")
+    public ResponseEntity<Void> sendStreamingMessage(@RequestBody SendMessageRequest request) {
         log.info("Sending streaming message to chat room: {}", request.getChatRoomId());
-        return chatApplicationService.sendStreamingMessage(request);
+        chatApplicationService.sendStreamingMessage(request);
+        return ResponseEntity.ok().build();
     }
     
     // LLM 서비스 직접 접근을 위한 프록시 엔드포인트

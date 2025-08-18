@@ -300,11 +300,24 @@
         // 연결 상태 확인
         async function checkConnection() {
             try {
-                const response = await fetch('http://localhost:8081/api/chat/llm-service-url');
-                if (response.ok) {
+                // 채팅 서비스 연결 확인
+                const chatResponse = await fetch('http://localhost:8081/api/chat/llm-service-url');
+                if (chatResponse.ok) {
                     updateConnectionStatus('Chat Service 연결됨', 'connected');
                 } else {
-                    updateConnectionStatus(`Chat Service 연결 실패 (${response.status})`, 'error');
+                    updateConnectionStatus(`Chat Service 연결 실패 (${chatResponse.status})`, 'error');
+                }
+
+                // LLM 서비스 연결 확인
+                try {
+                    const llmResponse = await fetch('http://localhost:8082/api/llm/stream/test');
+                    if (llmResponse.ok || llmResponse.status === 405) { // 405는 Method Not Allowed (GET 요청이므로 정상)
+                        updateConnectionStatus('Chat Service & LLM Service 연결됨', 'connected');
+                    } else {
+                        updateConnectionStatus(`LLM Service 연결 실패 (${llmResponse.status})`, 'error');
+                    }
+                } catch (llmError) {
+                    updateConnectionStatus('Chat Service 연결됨, LLM Service 연결 실패', 'error');
                 }
             } catch (error) {
                 console.error('연결 확인 오류:', error);
@@ -334,6 +347,7 @@
                     const data = await response.json();
                     currentChatRoomId = data.id; // chatRoomId가 아니라 id
                     updateConnectionStatus(`새 채팅방 생성됨: ${currentChatRoomId.substring(0, 8)}...`, 'connected');
+                    // subscribeToChatRoom(currentChatRoomId); // 채팅방 구독 시작 - Removed WebSocket
                 } else {
                     const errorText = await response.text();
                     throw new Error('채팅방 생성 실패: ' + response.status);
@@ -392,97 +406,81 @@
 
         // 스트리밍 메시지 전송
         async function sendStreamingMessage(message) {
-            return new Promise((resolve, reject) => {
-                if (currentEventSource) {
-                    currentEventSource.close();
-                }
-
-                showTyping();
-                
-                // POST 요청으로 스트리밍 응답 직접 처리
-                fetch('http://localhost:8081/api/chat/message/stream', {
+            try {
+                // 1. 먼저 채팅 서비스에 메시지 전송 (저장용)
+                const response = await fetch('http://localhost:8081/api/chat/message/stream', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Accept': 'text/event-stream',
                     },
                     body: JSON.stringify({
                         chatRoomId: currentChatRoomId,
                         userId: currentUserId,
                         message: message
                     })
-                }).then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-                    
-                    const reader = response.body.getReader();
-                    const decoder = new TextDecoder();
-                    let messageElement = null;
-                    let currentMessage = '';
-
-                    function processStream() {
-                        return reader.read().then(({ done, value }) => {
-                            if (done) {
-                                hideTyping();
-                                resolve();
-                                return;
-                            }
-
-                            const chunk = decoder.decode(value, { stream: true });
-                            const lines = chunk.split('\n');
-
-                            for (let line of lines) {
-                                line = line.trim();
-                                
-                                if (line.startsWith('event:')) {
-                                    const eventType = line.substring(6).trim();
-                                    
-                                    if (eventType === 'streaming_started') {
-                                        hideTyping();
-                                        messageElement = addMessage('', 'assistant', true);
-                                    }
-                                    
-                                } else if (line.startsWith('data:')) {
-                                    const data = line.substring(5).trim();
-                                    
-                                    if (data && data !== '') {
-                                        
-                                        try {
-                                            // JSON 파싱 시도
-                                            const jsonData = JSON.parse(data);
-                                            
-                                            if (jsonData.error) {
-                                                throw new Error(jsonData.error);
-                                            }
-                                            
-                                        } catch (e) {
-                                            // 일반 텍스트 청크로 처리
-                                            if (!messageElement) {
-                                                hideTyping();
-                                                messageElement = addMessage('', 'assistant', true);
-                                            }
-                                            
-                                            currentMessage += data + ' ';
-                                            updateMessage(messageElement, currentMessage.trim());
-                                        }
-                                    }
-                                }
-                            }
-
-                            return processStream();
-                        });
-                    }
-
-                    return processStream();
-                    
-                }).catch(error => {
-                    console.error('스트리밍 오류:', error);
-                    hideTyping();
-                    addMessage('스트리밍 중 오류가 발생했습니다: ' + error.message, 'assistant');
-                    reject(error);
                 });
-            });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                // 2. LLM 서비스로 직접 SSE 연결
+                if (currentEventSource) {
+                    currentEventSource.close();
+                }
+
+                const eventSource = new EventSource(`http://localhost:8082/api/llm/stream/${currentChatRoomId}`);
+                currentEventSource = eventSource;
+
+                let assistantMessageElement = null;
+                let fullResponse = '';
+
+                eventSource.addEventListener('start', (event) => {
+                    console.log('스트리밍 시작:', event.data);
+                    hideTyping();
+                    
+                    // assistant 메시지 요소 생성
+                    assistantMessageElement = addMessage('', 'assistant', true);
+                });
+
+                eventSource.addEventListener('chunk', (event) => {
+                    console.log('청크 수신:', event.data);
+                    if (assistantMessageElement) {
+                        fullResponse += event.data;
+                        assistantMessageElement.textContent = fullResponse;
+                        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                    }
+                });
+
+                eventSource.addEventListener('complete', (event) => {
+                    console.log('스트리밍 완료:', event.data);
+                    eventSource.close();
+                    currentEventSource = null;
+                    setLoading(false);
+                });
+
+                eventSource.addEventListener('error', (event) => {
+                    console.error('SSE 오류:', event);
+                    eventSource.close();
+                    currentEventSource = null;
+                    addMessage('스트리밍 중 오류가 발생했습니다.', 'assistant');
+                    setLoading(false);
+                });
+
+                eventSource.onerror = (error) => {
+                    console.error('SSE 연결 오류:', error);
+                    eventSource.close();
+                    currentEventSource = null;
+                    addMessage('스트리밍 연결에 실패했습니다.', 'assistant');
+                    setLoading(false);
+                };
+
+            } catch (error) {
+                console.error('스트리밍 오류:', error);
+                hideTyping();
+                addMessage('스트리밍 중 오류가 발생했습니다: ' + error.message, 'assistant');
+                setLoading(false);
+            }
         }
 
         // 동기 메시지 전송
@@ -557,6 +555,42 @@
 
         function hideTyping() {
             typingIndicator.classList.remove('show');
+        }
+
+        // WebSocket 연결 - Removed WebSocket-related functions
+
+        // WebSocket 구독 - Removed WebSocket-related functions
+
+        // WebSocket 메시지 처리 - Removed WebSocket-related functions
+
+        // 스트리밍 청크 처리 - Kept for SSE
+        function handleStreamingChunk(content, requestId) {
+            let messageElement = document.querySelector(`[data-request-id="${requestId}"]`);
+            
+            if (!messageElement) {
+                // 새 메시지 요소 생성
+                messageElement = addMessage('', 'assistant', true);
+                messageElement.setAttribute('data-request-id', requestId);
+            }
+            
+            // 기존 내용에 새 청크 추가
+            const currentContent = messageElement.textContent || '';
+            messageElement.textContent = currentContent + content;
+            
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // 스트리밍 완료 처리 - Kept for SSE
+        function handleStreamingComplete(fullResponse, requestId) {
+            console.log('Streaming completed:', fullResponse);
+            setLoading(false);
+        }
+
+        // 스트리밍 오류 처리 - Kept for SSE
+        function handleStreamingError(error, requestId) {
+            console.error('Streaming error:', error);
+            addMessage('오류가 발생했습니다: ' + error, 'assistant');
+            setLoading(false);
         }
     </script>
 </body>

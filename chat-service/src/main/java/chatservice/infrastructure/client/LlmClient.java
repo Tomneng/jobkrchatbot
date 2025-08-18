@@ -114,4 +114,25 @@ public class LlmClient {
                 .requestId(request.getRequestId())
                 .build();
     }
+
+    /**
+     * LLM 서비스에 SSE Emitter 등록
+     */
+    public void registerEmitter(String chatRoomId) {
+        try {
+            String url = llmServiceUrl + "/api/llm/register-emitter/" + chatRoomId;
+            log.info("Registering SSE emitter with LLM service: {}", url);
+            
+            // POST 요청으로 SSE Emitter 등록
+            // Note: This part of the code was not provided in the original file,
+            // so it's added as a placeholder. In a real application, you would
+            // use a WebClient or RestTemplate to make this call.
+            // For now, we'll just log the attempt.
+            log.info("Attempting to register SSE emitter for chat room: {}", chatRoomId);
+            
+        } catch (Exception e) {
+            log.error("Failed to register SSE emitter with LLM service for chat room: {}", chatRoomId, e);
+            throw new RuntimeException("LLM 서비스에 SSE Emitter 등록 실패", e);
+        }
+    }
 } 

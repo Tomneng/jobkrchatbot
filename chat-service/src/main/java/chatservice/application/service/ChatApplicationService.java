@@ -11,6 +11,7 @@ import chatservice.application.dto.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +19,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -116,10 +118,8 @@ public class ChatApplicationService {
         }
     }
     
-    public SseEmitter sendStreamingMessage(SendMessageRequest request) {
+    public void sendStreamingMessage(SendMessageRequest request) {
         log.info("Processing streaming message for chat room: {}", request.getChatRoomId());
-        
-        SseEmitter emitter = new SseEmitter(60000L); // 60초 타임아웃
         
         try {
             // 1. 채팅방 검증 및 사용자 메시지 저장
@@ -143,7 +143,7 @@ public class ChatApplicationService {
                 request.getUserId()
             );
             
-            // 3. LLM 스트리밍 요청 생성
+            // 3. LLM 요청을 Kafka로 발행
             String requestId = UUID.randomUUID().toString();
             LlmRequest llmRequest = LlmRequest.builder()
                     .chatRoomId(request.getChatRoomId())
@@ -152,136 +152,14 @@ public class ChatApplicationService {
                     .requestId(requestId)
                     .build();
             
-            // 4. 실시간 SSE 프록시 처리
-            handleRealTimeStreaming(llmRequest, emitter, chatRoom);
+            // Kafka로 LLM 요청 발행
+            messagePublisher.publishLlmRequest(llmRequest);
+            log.info("Published LLM request to Kafka: {}", requestId);
             
         } catch (Exception e) {
-            log.error("Error initializing streaming message for chat room: {}", request.getChatRoomId(), e);
-            try {
-                emitter.send(SseEmitter.event()
-                        .name("error")
-                        .data("{\"error\":\"채팅방 처리 중 오류가 발생했습니다.\"}"));
-                emitter.completeWithError(e);
-            } catch (IOException ioException) {
-                log.error("Error sending error event", ioException);
-            }
+            log.error("Error processing streaming message for chat room: {}", request.getChatRoomId(), e);
+            throw new RuntimeException("채팅방 처리 중 오류가 발생했습니다.", e);
         }
-        
-        return emitter;
-    }
-    
-    @Async
-    public CompletableFuture<Void> handleRealTimeStreaming(LlmRequest llmRequest, SseEmitter emitter, ChatRoom chatRoom) {
-        StringBuilder responseBuilder = new StringBuilder();
-        
-        try {
-            // 스트리밍 시작 이벤트를 프론트엔드로 전송
-            emitter.send(SseEmitter.event()
-                    .name("streaming_started")
-                    .data("{\"requestId\":\"" + llmRequest.getRequestId() + "\",\"chatRoomId\":\"" + llmRequest.getChatRoomId() + "\"}"));
-            
-            // LLM 서비스로부터 SSE 스트림을 받아서 실시간으로 프론트엔드에 전달
-            llmClient.generateStreamingResponse(llmRequest)
-                    .doOnNext(event -> {
-                        try {
-                            String eventName = event.event();
-                            String data = event.data();
-                            
-                            // LLM 서비스의 이벤트를 그대로 프론트엔드로 전달
-                            emitter.send(SseEmitter.event()
-                                    .name(eventName)
-                                    .data(data));
-                            
-                            // chunk 데이터 누적 (최종 저장용)
-                            if ("chunk".equals(eventName)) {
-                                responseBuilder.append(data).append(" ");
-                            }
-                            
-                            // Kafka 로깅 (실시간 스트리밍 진행 상황)
-                            if ("chunk".equals(eventName)) {
-                                messagePublisher.publishChatEvent(
-                                    llmRequest.getChatRoomId(), 
-                                    "LLM_CHUNK_RECEIVED", 
-                                    llmRequest.getUserId()
-                                );
-                            }
-                            
-                        } catch (IOException e) {
-                            log.error("Error proxying streaming event to frontend", e);
-                            emitter.completeWithError(e);
-                        }
-                    })
-                    .doOnError(error -> {
-                        log.error("Error in LLM streaming response", error);
-                        try {
-                            emitter.send(SseEmitter.event()
-                                    .name("error")
-                                    .data("{\"error\":\"LLM 서비스 오류가 발생했습니다.\"}"));
-                            
-                            // Kafka 오류 로깅
-                            messagePublisher.publishChatEvent(
-                                llmRequest.getChatRoomId(), 
-                                "LLM_STREAMING_ERROR", 
-                                llmRequest.getUserId()
-                            );
-                            
-                            emitter.completeWithError(error);
-                        } catch (IOException e) {
-                            log.error("Error sending error event to frontend", e);
-                        }
-                    })
-                    .doOnComplete(() -> {
-                        try {
-                            // 스트리밍 완료 처리
-                            String fullResponse = responseBuilder.toString().trim();
-                            
-                            if (!fullResponse.isEmpty()) {
-                                // LLM 응답을 채팅방에 저장
-                                ChatMessage llmMessage = new ChatMessage(
-                                    llmRequest.getChatRoomId(),
-                                    "assistant",
-                                    fullResponse
-                                );
-                                
-                                chatRoom.addMessage(llmMessage);
-                                chatRepository.save(chatRoom);
-                                
-                                // Kafka 이벤트 발행 (LLM 응답 완료)
-                                messagePublisher.publishChatEvent(
-                                    llmRequest.getChatRoomId(), 
-                                    "LLM_RESPONSE_COMPLETED", 
-                                    llmRequest.getUserId()
-                                );
-                            }
-                            
-                            // 완료 이벤트를 프론트엔드로 전송
-                            emitter.send(SseEmitter.event()
-                                    .name("streaming_completed")
-                                    .data("{\"requestId\":\"" + llmRequest.getRequestId() + "\",\"fullResponse\":\"" + fullResponse.replace("\"", "\\\"") + "\"}"));
-                            
-                            emitter.complete();
-                            log.info("Streaming completed and saved for request: {}", llmRequest.getRequestId());
-                            
-                        } catch (Exception e) {
-                            log.error("Error completing streaming", e);
-                            emitter.completeWithError(e);
-                        }
-                    })
-                    .subscribe(); // 구독 시작
-            
-        } catch (Exception e) {
-            log.error("Error setting up streaming proxy", e);
-            try {
-                emitter.send(SseEmitter.event()
-                        .name("error")
-                        .data("{\"error\":\"스트리밍 설정 중 오류가 발생했습니다.\"}"));
-                emitter.completeWithError(e);
-            } catch (IOException ioException) {
-                log.error("Error sending error event", ioException);
-            }
-        }
-        
-        return CompletableFuture.completedFuture(null);
     }
     
     public void saveMessage(SaveMessageRequest request) {
@@ -333,5 +211,79 @@ public class ChatApplicationService {
         return chatRooms.stream()
                 .map(ChatRoomSummaryResponse::from)
                 .toList();
+    }
+
+    /**
+     * Kafka로부터 LLM 응답을 구독하여 DB에 저장
+     */
+    @KafkaListener(topics = "llm-response", groupId = "chat-service")
+    public void handleLlmResponse(Map<String, Object> responseData) {
+        try {
+            log.info("Received LLM response from Kafka: {}", responseData.get("requestId"));
+            
+            String chatRoomId = (String) responseData.get("chatRoomId");
+            String userId = (String) responseData.get("userId");
+            String message = (String) responseData.get("message");
+            String requestId = (String) responseData.get("requestId");
+            
+            // 채팅방 조회
+            ChatRoom chatRoom = chatRepository.findById(chatRoomId)
+                    .orElseThrow(() -> new IllegalArgumentException("채팅방을 찾을 수 없습니다: " + chatRoomId));
+            
+            // LLM 응답을 채팅방에 추가
+            ChatMessage llmMessage = new ChatMessage(
+                chatRoomId,
+                "assistant", // LLM 응답은 assistant로 표시
+                message
+            );
+            
+            chatRoom.addMessage(llmMessage);
+            chatRepository.save(chatRoom);
+            
+            // Kafka 이벤트 발행 (LLM 응답 완료)
+            messagePublisher.publishChatEvent(
+                chatRoomId, 
+                "LLM_RESPONSE_COMPLETED", 
+                userId
+            );
+            
+            log.info("Successfully saved LLM response to chat room: {}, requestId: {}", chatRoomId, requestId);
+            
+        } catch (Exception e) {
+            log.error("Error handling LLM response from Kafka", e);
+        }
+    }
+    
+    /**
+     * Kafka로부터 LLM 오류를 구독하여 처리
+     */
+    @KafkaListener(topics = "llm-error", groupId = "chat-service")
+    public void handleLlmError(Map<String, Object> errorData) {
+        try {
+            log.info("Received LLM error from Kafka: {}", errorData.get("requestId"));
+            
+            String chatRoomId = (String) errorData.get("chatRoomId");
+            String userId = (String) errorData.get("userId");
+            String error = (String) errorData.get("error");
+            String requestId = (String) errorData.get("requestId");
+            
+            // 오류 메시지를 채팅방에 추가
+            ChatRoom chatRoom = chatRepository.findById(chatRoomId)
+                    .orElseThrow(() -> new IllegalArgumentException("채팅방을 찾을 수 없습니다: " + chatRoomId));
+            
+            ChatMessage errorMessage = new ChatMessage(
+                chatRoomId,
+                "assistant",
+                "죄송합니다. 응답 생성 중 오류가 발생했습니다: " + error
+            );
+            
+            chatRoom.addMessage(errorMessage);
+            chatRepository.save(chatRoom);
+            
+            log.info("Saved LLM error message to chat room: {}, requestId: {}", chatRoomId, requestId);
+            
+        } catch (Exception e) {
+            log.error("Error handling LLM error from Kafka", e);
+        }
     }
 } 
