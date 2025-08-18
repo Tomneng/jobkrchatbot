@@ -38,6 +38,11 @@ spring:
       host: redis
       port: 6379
 
+# LLM 서비스 설정 - 도커 환경에서 호스트 머신 접근
+llm:
+  service:
+    url: http://host.docker.internal:8082
+
 logging:
   level:
     chatservice: DEBUG

@@ -38,6 +38,11 @@ spring:
       host: localhost
       port: 6379
 
+# LLM 서비스 설정
+llm:
+  service:
+    url: http://localhost:8082
+
 logging:
   level:
     chatservice: DEBUG

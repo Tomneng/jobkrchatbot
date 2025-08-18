@@ -1,4 +1,4 @@
-package backend.jobkrchatbot.common.dto;
+package backend.jobkrchatbot.llmservice.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,9 +9,10 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ChatResponse {
-    private String message;
+public class LlmResponse {
+    private String response;
     private String chatRoomId;
     private String userId;
     private String requestId;
+    private String error;
 } 

@@ -4,6 +4,7 @@ import chatservice.domain.model.ChatMessage;
 import chatservice.domain.model.ChatRoom;
 import chatservice.domain.port.ChatRepository;
 import chatservice.domain.port.MessagePublisher;
+import chatservice.domain.port.LlmService;
 import chatservice.application.dto.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,7 @@ public class ChatApplicationService {
     
     private final ChatRepository chatRepository;
     private final MessagePublisher messagePublisher;
+    private final LlmService llmService;
     
     public ChatRoomResponse startChat(StartChatRequest request) {
         log.info("Starting chat for user: {}", request.getUserId());
@@ -55,16 +57,55 @@ public class ChatApplicationService {
         // 메시지가 추가된 채팅방을 저장
         chatRepository.save(chatRoom);
         
-        // LLM 서비스로 요청 전송 (비동기)
+        // LLM 서비스로 HTTP 동기 요청 전송
         String requestId = UUID.randomUUID().toString();
-        messagePublisher.publishUserMessage(request.getChatRoomId(), requestId, request.getMessage());
         
-        // 임시 응답 반환
-        return ChatResponse.builder()
-                .message("메시지를 처리 중입니다. 잠시만 기다려주세요...")
-                .chatRoomId(request.getChatRoomId())
-                .requestId(requestId)
-                .build();
+        try {
+            String llmResponse = llmService.generateResponse(
+                request.getChatRoomId(), 
+                request.getUserId(), 
+                request.getMessage(), 
+                requestId
+            );
+            
+            // LLM 응답을 채팅방에 추가
+            ChatMessage llmMessage = new ChatMessage(
+                request.getChatRoomId(),
+                "assistant", // LLM 응답은 assistant로 표시
+                llmResponse
+            );
+            
+            chatRoom.addMessage(llmMessage);
+            chatRepository.save(chatRoom);
+            
+            // 실제 LLM 응답 반환
+            return ChatResponse.builder()
+                    .message(llmResponse)
+                    .chatRoomId(request.getChatRoomId())
+                    .requestId(requestId)
+                    .build();
+                    
+        } catch (Exception e) {
+            log.error("Error getting LLM response for chat room: {}", request.getChatRoomId(), e);
+            
+            // 오류 발생 시 기본 응답
+            String errorMessage = "죄송합니다. 현재 서비스에 문제가 발생했습니다. 잠시 후 다시 시도해주세요.";
+            
+            ChatMessage errorChatMessage = new ChatMessage(
+                request.getChatRoomId(),
+                "assistant",
+                errorMessage
+            );
+            
+            chatRoom.addMessage(errorChatMessage);
+            chatRepository.save(chatRoom);
+            
+            return ChatResponse.builder()
+                    .message(errorMessage)
+                    .chatRoomId(request.getChatRoomId())
+                    .requestId(requestId)
+                    .build();
+        }
     }
     
     public ChatHistoryResponse getChatHistory(String chatRoomId) {

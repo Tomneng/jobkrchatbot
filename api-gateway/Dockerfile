@@ -8,9 +8,6 @@ COPY gradle gradle
 COPY build.gradle .
 COPY settings.gradle .
 
-# Common lib 복사
-COPY common-lib common-lib
-
 # API Gateway 소스 복사
 COPY api-gateway api-gateway
 

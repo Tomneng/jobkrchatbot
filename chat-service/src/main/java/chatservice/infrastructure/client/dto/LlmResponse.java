@@ -1,4 +1,4 @@
-package backend.jobkrchatbot.common.dto;
+package chatservice.infrastructure.client.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

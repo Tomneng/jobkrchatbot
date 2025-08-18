@@ -8,9 +8,6 @@ COPY gradle gradle
 COPY build.gradle .
 COPY settings.gradle .
 
-# Common lib 복사
-COPY common-lib common-lib
-
 # User service 소스 복사
 COPY user-service user-service
 

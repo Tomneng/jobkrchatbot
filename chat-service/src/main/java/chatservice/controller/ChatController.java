@@ -1,5 +1,7 @@
 package chatservice.controller;
 
+import chatservice.application.dto.ChatRoomResponse;
+import chatservice.application.dto.StartChatRequest;
 import chatservice.application.dto.*;
 import chatservice.application.service.ChatApplicationService;
 import lombok.RequiredArgsConstructor;
