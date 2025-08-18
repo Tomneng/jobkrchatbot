@@ -1,0 +1,30 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: llm-service
+  
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: llm-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+
+openai:
+  api:
+    key: ${OPENAI_API_KEY:your-api-key-here}
+    url: https://api.openai.com/v1/chat/completions
+    model: gpt-4o
+
+logging:
+  level:
+    backend.jobkrchatbot: DEBUG
+    org.springframework.kafka: DEBUG 
