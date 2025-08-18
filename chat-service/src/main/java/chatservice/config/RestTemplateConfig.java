@@ -10,11 +10,12 @@ import java.time.Duration;
 @Configuration
 public class RestTemplateConfig {
 
-    @Bean
-    public RestTemplate restTemplate(RestTemplateBuilder builder) {
-        return builder
-                .setConnectTimeout(Duration.ofSeconds(10))
-                .setReadTimeout(Duration.ofSeconds(30))
-                .build();
-    }
+    // RestTemplate은 더 이상 사용하지 않음 - WebClient로 대체됨
+    // @Bean
+    // public RestTemplate restTemplate(RestTemplateBuilder builder) {
+    //     return builder
+    //             .setConnectTimeout(Duration.ofSeconds(10))
+    //             .setReadTimeout(Duration.ofSeconds(30))
+    //             .build();
+    // }
 } 

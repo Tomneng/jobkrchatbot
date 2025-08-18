@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>구직자 AI 챗봇 테스트</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chat-container {
+            width: 800px;
+            height: 600px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: #4f46e5;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .chat-header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .chat-header p {
+            opacity: 0.8;
+            font-size: 14px;
+        }
+
+        .connection-status {
+            padding: 10px 20px;
+            background: #f3f4f6;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .connection-status.connected {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .connection-status.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f9fafb;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message.user {
+            align-items: flex-end;
+        }
+
+        .message.assistant {
+            align-items: flex-start;
+        }
+
+        .message-bubble {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+
+        .message.user .message-bubble {
+            background: #4f46e5;
+            color: white;
+        }
+
+        .message.assistant .message-bubble {
+            background: white;
+            border: 1px solid #e5e7eb;
+            color: #1f2937;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #9ca3af;
+            margin-top: 4px;
+        }
+
+        .typing-indicator {
+            display: none;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .typing-indicator.show {
+            display: flex;
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+            padding: 12px 16px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 18px;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: #9ca3af;
+            border-radius: 50%;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+
+        .chat-input {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .chat-input textarea {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            resize: none;
+            font-family: inherit;
+            font-size: 14px;
+            max-height: 100px;
+            min-height: 44px;
+        }
+
+        .chat-input textarea:focus {
+            outline: none;
+            border-color: #4f46e5;
+        }
+
+        .send-button {
+            padding: 12px 20px;
+            background: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .send-button:hover:not(:disabled) {
+            background: #4338ca;
+        }
+
+        .send-button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .control-button {
+            padding: 8px 12px;
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.2s;
+        }
+
+        .control-button:hover {
+            background: #e5e7eb;
+        }
+
+        .control-button.active {
+            background: #4f46e5;
+            color: white;
+            border-color: #4f46e5;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>🤖 구직자 AI 챗봇</h1>
+            <p>면접 질문 생성 및 학습 경로 제안 서비스</p>
+        </div>
+        
+        <div class="connection-status" id="connectionStatus">
+            연결 상태 확인 중...
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div class="message assistant">
+                <div class="message-bubble">
+                    안녕하세요! 👋 구직자 AI 챗봇입니다.<br>
+                    이력서 정보(경력, 직무, 기술 스킬)를 입력해주시면 맞춤형 면접 질문과 학습 경로를 제안해드려요!
+                </div>
+                <div class="message-time">시스템 메시지</div>
+            </div>
+        </div>
+
+        <div class="typing-indicator" id="typingIndicator">
+            <div class="typing-dots">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+        </div>
+
+        <div class="chat-input">
+            <div class="controls">
+                <button class="control-button active" onclick="setMode('stream')">스트리밍 모드</button>
+                <button class="control-button" onclick="setMode('sync')">동기 모드</button>
+                <button class="control-button" onclick="startNewChat()">새 채팅</button>
+                <button class="control-button" onclick="clearChat()">채팅 지우기</button>
+            </div>
+            <div class="input-container">
+                <textarea 
+                    id="messageInput" 
+                    placeholder="예: 백엔드 개발자, 3년 경력, Java Spring 사용 경험 있음"
+                    rows="1"
+                ></textarea>
+                <button class="send-button" id="sendButton" onclick="sendMessage()">전송</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 전역 변수
+        let currentChatRoomId = null;
+        let currentUserId = 'user123';
+        let isStreaming = false;
+        let streamingMode = 'stream'; // 'stream' or 'sync'
+        let currentEventSource = null;
+
+        // DOM 요소
+        const messagesContainer = document.getElementById('chatMessages');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const connectionStatus = document.getElementById('connectionStatus');
+
+        // 초기화
+        window.onload = function() {
+            checkConnection();
+            startNewChat();
+            messageInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+        };
+
+        // 연결 상태 확인
+        async function checkConnection() {
+            try {
+                const response = await fetch('http://localhost:8081/api/chat/llm-service-url');
+                if (response.ok) {
+                    updateConnectionStatus('Chat Service 연결됨', 'connected');
+                } else {
+                    updateConnectionStatus(`Chat Service 연결 실패 (${response.status})`, 'error');
+                }
+            } catch (error) {
+                console.error('연결 확인 오류:', error);
+                updateConnectionStatus('Chat Service 연결 실패: 서버가 실행 중인지 확인하세요', 'error');
+            }
+        }
+
+        function updateConnectionStatus(message, type) {
+            connectionStatus.textContent = message;
+            connectionStatus.className = `connection-status ${type}`;
+        }
+
+        // 새 채팅 시작
+        async function startNewChat() {
+            try {
+                const response = await fetch('http://localhost:8081/api/chat/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        userId: currentUserId
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    currentChatRoomId = data.id; // chatRoomId가 아니라 id
+                    updateConnectionStatus(`새 채팅방 생성됨: ${currentChatRoomId.substring(0, 8)}...`, 'connected');
+                } else {
+                    const errorText = await response.text();
+                    throw new Error('채팅방 생성 실패: ' + response.status);
+                }
+            } catch (error) {
+                console.error('채팅방 생성 오류:', error);
+                updateConnectionStatus('채팅방 생성 실패: ' + error.message, 'error');
+            }
+        }
+
+        // 모드 설정
+        function setMode(mode) {
+            streamingMode = mode;
+            document.querySelectorAll('.control-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+
+        // 채팅 지우기
+        function clearChat() {
+            messagesContainer.innerHTML = `
+                <div class="message assistant">
+                    <div class="message-bubble">
+                        안녕하세요! 👋 구직자 AI 챗봇입니다.<br>
+                        이력서 정보(경력, 직무, 기술 스킬)를 입력해주시면 맞춤형 면접 질문과 학습 경로를 제안해드려요!
+                    </div>
+                    <div class="message-time">시스템 메시지</div>
+                </div>
+            `;
+        }
+
+        // 메시지 전송
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message || isStreaming || !currentChatRoomId) return;
+
+            // 사용자 메시지 표시
+            addMessage(message, 'user');
+            messageInput.value = '';
+            
+            setLoading(true);
+
+            try {
+                if (streamingMode === 'stream') {
+                    await sendStreamingMessage(message);
+                } else {
+                    await sendSyncMessage(message);
+                }
+            } catch (error) {
+                addMessage('오류가 발생했습니다: ' + error.message, 'assistant');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // 스트리밍 메시지 전송
+        async function sendStreamingMessage(message) {
+            return new Promise((resolve, reject) => {
+                if (currentEventSource) {
+                    currentEventSource.close();
+                }
+
+                showTyping();
+                
+                // POST 요청으로 스트리밍 응답 직접 처리
+                fetch('http://localhost:8081/api/chat/message/stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'text/event-stream',
+                    },
+                    body: JSON.stringify({
+                        chatRoomId: currentChatRoomId,
+                        userId: currentUserId,
+                        message: message
+                    })
+                }).then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let messageElement = null;
+                    let currentMessage = '';
+
+                    function processStream() {
+                        return reader.read().then(({ done, value }) => {
+                            if (done) {
+                                hideTyping();
+                                resolve();
+                                return;
+                            }
+
+                            const chunk = decoder.decode(value, { stream: true });
+                            const lines = chunk.split('\n');
+
+                            for (let line of lines) {
+                                line = line.trim();
+                                
+                                if (line.startsWith('event:')) {
+                                    const eventType = line.substring(6).trim();
+                                    
+                                    if (eventType === 'streaming_started') {
+                                        hideTyping();
+                                        messageElement = addMessage('', 'assistant', true);
+                                    }
+                                    
+                                } else if (line.startsWith('data:')) {
+                                    const data = line.substring(5).trim();
+                                    
+                                    if (data && data !== '') {
+                                        
+                                        try {
+                                            // JSON 파싱 시도
+                                            const jsonData = JSON.parse(data);
+                                            
+                                            if (jsonData.error) {
+                                                throw new Error(jsonData.error);
+                                            }
+                                            
+                                        } catch (e) {
+                                            // 일반 텍스트 청크로 처리
+                                            if (!messageElement) {
+                                                hideTyping();
+                                                messageElement = addMessage('', 'assistant', true);
+                                            }
+                                            
+                                            currentMessage += data + ' ';
+                                            updateMessage(messageElement, currentMessage.trim());
+                                        }
+                                    }
+                                }
+                            }
+
+                            return processStream();
+                        });
+                    }
+
+                    return processStream();
+                    
+                }).catch(error => {
+                    console.error('스트리밍 오류:', error);
+                    hideTyping();
+                    addMessage('스트리밍 중 오류가 발생했습니다: ' + error.message, 'assistant');
+                    reject(error);
+                });
+            });
+        }
+
+        // 동기 메시지 전송
+        async function sendSyncMessage(message) {
+            showTyping();
+
+            const response = await fetch('http://localhost:8081/api/chat/message', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    chatRoomId: currentChatRoomId,
+                    userId: currentUserId,
+                    message: message
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('메시지 전송 실패');
+            }
+
+            const data = await response.json();
+            hideTyping();
+            addMessage(data.message, 'assistant');
+        }
+
+        // 메시지 추가
+        function addMessage(text, sender, isStreaming = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = 'message-bubble';
+            bubbleDiv.textContent = text;
+            
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            timeDiv.textContent = new Date().toLocaleTimeString();
+            
+            messageDiv.appendChild(bubbleDiv);
+            messageDiv.appendChild(timeDiv);
+            messagesContainer.appendChild(messageDiv);
+            
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            return isStreaming ? bubbleDiv : null;
+        }
+
+        // 메시지 업데이트 (스트리밍용)
+        function updateMessage(element, text) {
+            if (element) {
+                element.textContent = text;
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            } else {
+                console.error('메시지 요소가 null입니다!');
+            }
+        }
+
+        // 로딩 상태 설정
+        function setLoading(loading) {
+            isStreaming = loading;
+            sendButton.disabled = loading;
+            sendButton.textContent = loading ? '전송중...' : '전송';
+        }
+
+        // 타이핑 표시
+        function showTyping() {
+            typingIndicator.classList.add('show');
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function hideTyping() {
+            typingIndicator.classList.remove('show');
+        }
+    </script>
+</body>
+</html> 

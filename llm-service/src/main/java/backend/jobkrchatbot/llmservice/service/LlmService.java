@@ -5,7 +5,12 @@ import backend.jobkrchatbot.llmservice.dto.LlmResponse;
 import backend.jobkrchatbot.llmservice.infrastructure.GptClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Service
@@ -41,6 +46,81 @@ public class LlmService {
                     .requestId(request.getRequestId())
                     .build();
         }
+    }
+    
+    @Async
+    public CompletableFuture<Void> generateStreamingResponse(LlmRequest request, SseEmitter emitter) {
+        try {
+            log.info("Generating streaming response for chat room: {}, user: {}", 
+                    request.getChatRoomId(), request.getUserId());
+            
+            // 구직자 맞춤형 프롬프트 생성
+            String systemPrompt = createJobSeekerPrompt();
+            
+            // GPT API 호출 - 사용자 메시지와 시스템 프롬프트 조합
+            String fullResponse = gptClient.generateResponse(request.getUserMessage(), systemPrompt);
+            
+            // 응답을 단어 단위로 분할하여 스트리밍 효과 생성
+            String[] words = fullResponse.split("\\s+");
+            
+            // 메타데이터 전송
+            emitter.send(SseEmitter.event()
+                    .name("start")
+                    .data("{"
+                            + "\"chatRoomId\":\"" + request.getChatRoomId() + "\","
+                            + "\"userId\":\"" + request.getUserId() + "\","
+                            + "\"requestId\":\"" + request.getRequestId() + "\""
+                            + "}"));
+            
+            // 단어별로 스트리밍
+            StringBuilder currentChunk = new StringBuilder();
+            for (int i = 0; i < words.length; i++) {
+                currentChunk.append(words[i]);
+                
+                // 2-3 단어씩 묶어서 전송 (더 자연스러운 스트리밍 효과)
+                if (i % 2 == 1 || i == words.length - 1) {
+                    emitter.send(SseEmitter.event()
+                            .name("chunk")
+                            .data(currentChunk.toString()));
+                    
+                    currentChunk = new StringBuilder();
+                    
+                    // 스트리밍 딜레이 (타이핑 효과)
+                    Thread.sleep(100); // 100ms 딜레이
+                } else {
+                    currentChunk.append(" ");
+                }
+            }
+            
+            // 완료 이벤트 전송
+            emitter.send(SseEmitter.event()
+                    .name("complete")
+                    .data("{"
+                            + "\"chatRoomId\":\"" + request.getChatRoomId() + "\","
+                            + "\"requestId\":\"" + request.getRequestId() + "\""
+                            + "}"));
+            
+            emitter.complete();
+            log.info("Streaming response completed for request: {}", request.getRequestId());
+            
+        } catch (Exception e) {
+            log.error("Error generating streaming response for request: {}", request.getRequestId(), e);
+            
+            try {
+                emitter.send(SseEmitter.event()
+                        .name("error")
+                        .data("{"
+                                + "\"error\":\"응답 생성 중 오류가 발생했습니다.\","
+                                + "\"chatRoomId\":\"" + request.getChatRoomId() + "\","
+                                + "\"requestId\":\"" + request.getRequestId() + "\""
+                                + "}"));
+                emitter.completeWithError(e);
+            } catch (IOException ioException) {
+                log.error("Error sending error event", ioException);
+            }
+        }
+        
+        return CompletableFuture.completedFuture(null);
     }
     
     /**

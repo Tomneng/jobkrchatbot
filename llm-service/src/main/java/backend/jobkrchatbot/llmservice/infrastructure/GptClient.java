@@ -29,7 +29,7 @@ public class GptClient {
     private String model;
 
     public String generateResponse(String userPrompt, String systemPrompt) {
-        return callGptApi(userPrompt, systemPrompt, 1000, 0.7);
+        return callGptApi(userPrompt, systemPrompt, 2000, 0.3);
     }
 
     private String callGptApi(String userPrompt, String systemPrompt, int maxTokens, double temperature) {
