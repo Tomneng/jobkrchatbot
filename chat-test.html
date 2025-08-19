@@ -407,7 +407,16 @@
         // 스트리밍 메시지 전송
         async function sendStreamingMessage(message) {
             try {
-                // 1. 먼저 채팅 서비스에 메시지 전송 (저장용)
+                // 1. SSE 연결 먼저 확인 및 생성
+                if (!currentEventSource || currentEventSource.readyState === EventSource.CLOSED) {
+                    console.log('새 SSE 연결 생성');
+                    
+                    // SSE 연결 생성하고 이벤트 리스너 설정
+                    await createSSEConnection();
+                }
+
+                // 2. SSE 연결이 준비된 후 메시지 전송
+                console.log('SSE 연결 준비 완료, 메시지 전송 시작');
                 const response = await fetch('http://localhost:8081/api/chat/message/stream', {
                     method: 'POST',
                     headers: {
@@ -424,16 +433,35 @@
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
 
-                // 2. LLM 서비스로 직접 SSE 연결
-                if (currentEventSource) {
-                    currentEventSource.close();
-                }
+            } catch (error) {
+                console.error('스트리밍 오류:', error);
+                hideTyping();
+                addMessage('스트리밍 중 오류가 발생했습니다: ' + error.message, 'assistant');
+                setLoading(false);
+            }
+        }
 
+        // SSE 연결 생성 함수
+        function createSSEConnection() {
+            return new Promise((resolve, reject) => {
                 const eventSource = new EventSource(`http://localhost:8082/api/llm/stream/${currentChatRoomId}`);
                 currentEventSource = eventSource;
 
                 let assistantMessageElement = null;
                 let fullResponse = '';
+                let connectionEstablished = false;
+
+                eventSource.addEventListener('connected', (event) => {
+                    console.log('SSE 연결됨:', event.data);
+                    if (!connectionEstablished) {
+                        connectionEstablished = true;
+                        resolve(); // 연결 완료 신호
+                    }
+                });
+
+                eventSource.addEventListener('ping', (event) => {
+                    console.log('Keep-alive ping 수신:', event.data);
+                });
 
                 eventSource.addEventListener('start', (event) => {
                     console.log('스트리밍 시작:', event.data);
@@ -454,9 +482,11 @@
 
                 eventSource.addEventListener('complete', (event) => {
                     console.log('스트리밍 완료:', event.data);
-                    eventSource.close();
-                    currentEventSource = null;
+                    // 연결은 유지하고 로딩 상태만 해제
                     setLoading(false);
+                    // fullResponse 초기화
+                    fullResponse = '';
+                    assistantMessageElement = null;
                 });
 
                 eventSource.addEventListener('error', (event) => {
@@ -465,6 +495,9 @@
                     currentEventSource = null;
                     addMessage('스트리밍 중 오류가 발생했습니다.', 'assistant');
                     setLoading(false);
+                    if (!connectionEstablished) {
+                        reject(new Error('SSE 연결 실패'));
+                    }
                 });
 
                 eventSource.onerror = (error) => {
@@ -473,14 +506,20 @@
                     currentEventSource = null;
                     addMessage('스트리밍 연결에 실패했습니다.', 'assistant');
                     setLoading(false);
+                    if (!connectionEstablished) {
+                        reject(new Error('SSE 연결 실패'));
+                    }
                 };
 
-            } catch (error) {
-                console.error('스트리밍 오류:', error);
-                hideTyping();
-                addMessage('스트리밍 중 오류가 발생했습니다: ' + error.message, 'assistant');
-                setLoading(false);
-            }
+                // 5초 후에도 연결이 안되면 타임아웃
+                setTimeout(() => {
+                    if (!connectionEstablished) {
+                        eventSource.close();
+                        currentEventSource = null;
+                        reject(new Error('SSE 연결 타임아웃'));
+                    }
+                }, 5000);
+            });
         }
 
         // 동기 메시지 전송
@@ -556,12 +595,6 @@
         function hideTyping() {
             typingIndicator.classList.remove('show');
         }
-
-        // WebSocket 연결 - Removed WebSocket-related functions
-
-        // WebSocket 구독 - Removed WebSocket-related functions
-
-        // WebSocket 메시지 처리 - Removed WebSocket-related functions
 
         // 스트리밍 청크 처리 - Kept for SSE
         function handleStreamingChunk(content, requestId) {

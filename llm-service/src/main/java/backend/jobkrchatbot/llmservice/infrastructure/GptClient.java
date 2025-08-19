@@ -77,7 +77,7 @@ public class GptClient {
                             // choices 배열 확인
                             if (!json.has("choices") || json.get("choices").size() == 0) {
                                 log.info("choices 배열 문제");
-                                return null;
+                                return "";
                             }
 
                             JsonNode choice = json.get("choices").get(0);
@@ -86,7 +86,7 @@ public class GptClient {
                             // finish_reason 확인
                             if (choice.has("finish_reason") && !choice.get("finish_reason").asText().equals("null")) {
                                 log.info("finish_reason 조건에서 걸림");
-                                return null;
+                                return "";
                             }
 
                             // delta에서 content 추출
@@ -97,11 +97,11 @@ public class GptClient {
                             }
 
                             log.info("delta에 content가 없음");
-                            return null;
+                            return "";
 
                         } catch (Exception e) {
                             log.error("파싱 실패: {}", data, e);
-                            return null;
+                            return "";
                         }
                     })
                 .filter(content -> content != null && !content.isEmpty())

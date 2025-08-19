@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.publisher.Flux;
@@ -34,10 +35,47 @@ public class LlmService {
     private final ConcurrentHashMap<String, SseEmitter> chatRoomEmitters = new ConcurrentHashMap<>();
 
     /**
+     * Keep-alive: 5분마다 ping 이벤트 전송하여 연결 유지
+     */
+    @Scheduled(fixedRate = 300000) // 5분마다 실행
+    public void sendKeepAlive() {
+        if (chatRoomEmitters.isEmpty()) {
+            return;
+        }
+        
+        log.debug("Sending keep-alive to {} SSE connections", chatRoomEmitters.size());
+        
+        chatRoomEmitters.entrySet().removeIf(entry -> {
+            String chatRoomId = entry.getKey();
+            SseEmitter emitter = entry.getValue();
+            
+            try {
+                emitter.send(SseEmitter.event()
+                    .name("ping")
+                    .data(Map.of(
+                        "chatRoomId", chatRoomId,
+                        "timestamp", System.currentTimeMillis()
+                    )));
+                return false; // 성공하면 유지
+            } catch (IOException e) {
+                log.warn("Failed to send keep-alive to chat room: {}, removing connection", chatRoomId);
+                return true; // 실패하면 제거
+            }
+        });
+    }
+
+    /**
      * 채팅방별 직접 SSE 스트리밍 연결 생성
      */
     public SseEmitter createStreamingConnection(String chatRoomId) {
-        SseEmitter emitter = new SseEmitter(60000L); // 60초 타임아웃
+        // 기존 연결이 있다면 재사용
+        SseEmitter existingEmitter = chatRoomEmitters.get(chatRoomId);
+        if (existingEmitter != null) {
+            log.info("Reusing existing SSE emitter for chat room: {}", chatRoomId);
+            return existingEmitter;
+        }
+        
+        SseEmitter emitter = new SseEmitter(1800000L); // 30분 타임아웃 (1800초)
         
         // 연결 완료 시 처리
         emitter.onCompletion(() -> {
@@ -58,7 +96,20 @@ public class LlmService {
         });
         
         chatRoomEmitters.put(chatRoomId, emitter);
-        log.info("SSE emitter created for chat room: {}", chatRoomId);
+        log.info("SSE emitter created for chat room: {} with 30min timeout", chatRoomId);
+        
+        // 연결 확인 이벤트 전송
+        try {
+            emitter.send(SseEmitter.event()
+                .name("connected")
+                .data(Map.of(
+                    "chatRoomId", chatRoomId,
+                    "message", "SSE 연결이 설정되었습니다",
+                    "timestamp", System.currentTimeMillis()
+                )));
+        } catch (IOException e) {
+            log.error("Error sending connection event", e);
+        }
         
         return emitter;
     }
@@ -193,8 +244,8 @@ public class LlmService {
                         
                         log.info("완료 이벤트 전송됨");
                         
-                        // SSE 완료
-                        emitter.complete();
+                        // SSE 연결 유지 - complete() 호출하지 않음
+                        // emitter.complete(); // 제거하여 연결 유지
                         
                         // 저장용 이벤트를 Kafka로 발행
                         kafkaTemplate.send("llm-response", Map.of(
