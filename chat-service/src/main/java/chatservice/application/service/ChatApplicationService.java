@@ -46,32 +46,6 @@ public class ChatApplicationService {
     }
     
     /**
-     * 동기 메시지 전송 및 응답
-     */
-    public ChatResponse sendMessage(SendMessageRequest request) {
-        log.info("Processing message for chat room: {}", request.getChatRoomId());
-        
-        // 1. 사용자 메시지 저장
-        ChatRoom chatRoom = messageService.saveUserMessage(
-            request.getChatRoomId(), 
-            request.getUserId(), 
-            request.getMessage()
-        );
-        
-        // 2. LLM 응답 생성
-        String llmResponse = llmIntegrationService.generateSyncResponse(request);
-        
-        // 3. LLM 응답 저장
-        messageService.saveLlmMessage(request.getChatRoomId(), llmResponse);
-        
-        return ChatResponse.builder()
-                .message(llmResponse)
-                .chatRoomId(request.getChatRoomId())
-                .requestId(UUID.randomUUID().toString())
-                .build();
-    }
-    
-    /**
      * 비동기 스트리밍 메시지 전송
      */
     public void sendStreamingMessage(SendMessageRequest request) {

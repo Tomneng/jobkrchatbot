@@ -32,13 +32,6 @@ public class ChatController {
         return ResponseEntity.ok(response);
     }
     
-    @PostMapping("/message")
-    public ResponseEntity<ChatResponse> sendMessage(@RequestBody SendMessageRequest request) {
-        log.info("Sending message to chat room: {}", request.getChatRoomId());
-        ChatResponse response = chatApplicationService.sendMessage(request);
-        return ResponseEntity.ok(response);
-    }
-    
     @PostMapping("/message/stream")
     public ResponseEntity<Void> sendStreamingMessage(@RequestBody SendMessageRequest request) {
         log.info("Sending streaming message to chat room: {}", request.getChatRoomId());

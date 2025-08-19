@@ -347,9 +347,7 @@
                     const data = await response.json();
                     currentChatRoomId = data.id; // chatRoomId가 아니라 id
                     updateConnectionStatus(`새 채팅방 생성됨: ${currentChatRoomId.substring(0, 8)}...`, 'connected');
-                    // subscribeToChatRoom(currentChatRoomId); // 채팅방 구독 시작 - Removed WebSocket
                 } else {
-                    const errorText = await response.text();
                     throw new Error('채팅방 생성 실패: ' + response.status);
                 }
             } catch (error) {
@@ -392,11 +390,8 @@
             setLoading(true);
 
             try {
-                if (streamingMode === 'stream') {
-                    await sendStreamingMessage(message);
-                } else {
-                    await sendSyncMessage(message);
-                }
+                await sendStreamingMessage(message);
+
             } catch (error) {
                 addMessage('오류가 발생했습니다: ' + error.message, 'assistant');
             } finally {
@@ -522,31 +517,6 @@
             });
         }
 
-        // 동기 메시지 전송
-        async function sendSyncMessage(message) {
-            showTyping();
-
-            const response = await fetch('http://localhost:8081/api/chat/message', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    chatRoomId: currentChatRoomId,
-                    userId: currentUserId,
-                    message: message
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error('메시지 전송 실패');
-            }
-
-            const data = await response.json();
-            hideTyping();
-            addMessage(data.message, 'assistant');
-        }
-
         // 메시지 추가
         function addMessage(text, sender, isStreaming = false) {
             const messageDiv = document.createElement('div');
@@ -569,16 +539,6 @@
             return isStreaming ? bubbleDiv : null;
         }
 
-        // 메시지 업데이트 (스트리밍용)
-        function updateMessage(element, text) {
-            if (element) {
-                element.textContent = text;
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            } else {
-                console.error('메시지 요소가 null입니다!');
-            }
-        }
-
         // 로딩 상태 설정
         function setLoading(loading) {
             isStreaming = loading;
@@ -586,45 +546,10 @@
             sendButton.textContent = loading ? '전송중...' : '전송';
         }
 
-        // 타이핑 표시
-        function showTyping() {
-            typingIndicator.classList.add('show');
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-
         function hideTyping() {
             typingIndicator.classList.remove('show');
         }
 
-        // 스트리밍 청크 처리 - Kept for SSE
-        function handleStreamingChunk(content, requestId) {
-            let messageElement = document.querySelector(`[data-request-id="${requestId}"]`);
-            
-            if (!messageElement) {
-                // 새 메시지 요소 생성
-                messageElement = addMessage('', 'assistant', true);
-                messageElement.setAttribute('data-request-id', requestId);
-            }
-            
-            // 기존 내용에 새 청크 추가
-            const currentContent = messageElement.textContent || '';
-            messageElement.textContent = currentContent + content;
-            
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-
-        // 스트리밍 완료 처리 - Kept for SSE
-        function handleStreamingComplete(fullResponse, requestId) {
-            console.log('Streaming completed:', fullResponse);
-            setLoading(false);
-        }
-
-        // 스트리밍 오류 처리 - Kept for SSE
-        function handleStreamingError(error, requestId) {
-            console.error('Streaming error:', error);
-            addMessage('오류가 발생했습니다: ' + error, 'assistant');
-            setLoading(false);
-        }
     </script>
 </body>
 </html> 
