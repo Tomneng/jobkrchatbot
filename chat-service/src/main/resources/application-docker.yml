@@ -8,7 +8,7 @@ spring:
   datasource:
     url: jdbc:postgresql://postgres:5432/jobkrchatbot
     username: postgres
-    password: password
+    password: 1234
     driver-class-name: org.postgresql.Driver
   
   jpa:
@@ -38,10 +38,10 @@ spring:
       host: redis
       port: 6379
 
-# LLM 서비스 설정 - 도커 환경에서 호스트 머신 접근
+# LLM 서비스 설정
 llm:
   service:
-    url: http://host.docker.internal:8082
+    url: http://llm-service:8082
 
 logging:
   level:

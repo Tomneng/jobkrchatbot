@@ -9,12 +9,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.Map;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class KafkaMessagePublisher implements MessagePublisher {
     
-    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
     
     private static final String CHAT_EVENTS_TOPIC = "chat-events";
@@ -23,30 +25,43 @@ public class KafkaMessagePublisher implements MessagePublisher {
     
     @Override
     public void publishChatEvent(String chatRoomId, String eventType, String userId) {
-        String eventMessage = String.format("{\"chatRoomId\":\"%s\",\"eventType\":\"%s\",\"userId\":\"%s\"}", 
-                chatRoomId, eventType, userId);
+        Map<String, Object> eventData = Map.of(
+            "chatRoomId", chatRoomId,
+            "eventType", eventType,
+            "userId", userId
+        );
         
-        kafkaTemplate.send(CHAT_EVENTS_TOPIC, chatRoomId, eventMessage);
+        kafkaTemplate.send(CHAT_EVENTS_TOPIC, chatRoomId, eventData);
         log.info("Chat event published: {} for chat room: {}", eventType, chatRoomId);
     }
     
     @Override
     public void publishUserMessage(String chatRoomId, String requestId, String message) {
-        String messagePayload = String.format("{\"chatRoomId\":\"%s\",\"requestId\":\"%s\",\"message\":\"%s\"}", 
-                chatRoomId, requestId, message);
+        Map<String, Object> messageData = Map.of(
+            "chatRoomId", chatRoomId,
+            "requestId", requestId,
+            "message", message
+        );
         
-        kafkaTemplate.send(USER_MESSAGES_TOPIC, chatRoomId, messagePayload);
-        log.info("User message published for chat room: {}, requestId: {}", chatRoomId, requestId);
+        kafkaTemplate.send(USER_MESSAGES_TOPIC, chatRoomId, messageData);
+        log.info("User message published to Kafka: chatRoom={}, requestId={}", chatRoomId, requestId);
     }
     
     @Override
     public void publishLlmRequest(LlmRequest llmRequest) {
         try {
-            String requestJson = objectMapper.writeValueAsString(llmRequest);
-            kafkaTemplate.send(LLM_REQUESTS_TOPIC, llmRequest.getChatRoomId(), requestJson);
+            // MSA 원칙: 단순 JSON 문자열로 직렬화하여 서비스 간 독립성 보장
+            Map<String, Object> requestData = Map.of(
+                "chatRoomId", llmRequest.getChatRoomId(),
+                "userId", llmRequest.getUserId(),
+                "userMessage", llmRequest.getUserMessage(),
+                "requestId", llmRequest.getRequestId()
+            );
+            
+            kafkaTemplate.send(LLM_REQUESTS_TOPIC, llmRequest.getChatRoomId(), requestData);
             log.info("LLM request published to Kafka: {}", llmRequest.getRequestId());
-        } catch (JsonProcessingException e) {
-            log.error("Failed to serialize LLM request: {}", llmRequest.getRequestId(), e);
+        } catch (Exception e) {
+            log.error("Failed to publish LLM request: {}", llmRequest.getRequestId(), e);
         }
     }
 }

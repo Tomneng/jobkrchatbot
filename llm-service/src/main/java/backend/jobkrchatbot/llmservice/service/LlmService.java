@@ -3,10 +3,10 @@ package backend.jobkrchatbot.llmservice.service;
 import backend.jobkrchatbot.llmservice.dto.LlmRequest;
 import backend.jobkrchatbot.llmservice.dto.LlmResponse;
 import backend.jobkrchatbot.llmservice.infrastructure.GptClient;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Async;
@@ -27,9 +27,7 @@ public class LlmService {
 
     private final GptClient gptClient;
     private final KafkaTemplate<String, Object> kafkaTemplate;
-    
-    @Autowired
-    private ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper;
     
     // 채팅방별 SSE Emitter를 저장하는 맵
     private final ConcurrentHashMap<String, SseEmitter> chatRoomEmitters = new ConcurrentHashMap<>();
@@ -122,22 +120,35 @@ public class LlmService {
     }
 
     /**
-     * Kafka로부터 LLM 요청을 구독하여 처리
+     * Kafka로부터 LLM 요청을 구독하여 처리 (MSA 원칙: 고성능 + 서비스 독립성)
      */
     @KafkaListener(topics = "llm-request", groupId = "llm-service")
-    public void handleLlmRequest(String requestJson) {
+    public void handleLlmRequest(String jsonMessage) {
         try {
-            log.info("Received LLM request from Kafka: {}", requestJson);
+            log.info("Received LLM request from Kafka");
             
-            // JSON 문자열을 LlmRequest 객체로 변환
-            LlmRequest request = objectMapper.readValue(requestJson, LlmRequest.class);
-            log.info("Parsed LLM request: {}", request.getRequestId());
+            // 고성능 선택적 파싱: 필요한 필드만 추출
+            JsonNode json = objectMapper.readTree(jsonMessage);
+            String chatRoomId = json.get("chatRoomId").asText();
+            String userId = json.get("userId").asText();
+            String userMessage = json.get("userMessage").asText();
+            String requestId = json.get("requestId").asText();
+            
+            log.info("Parsed LLM request: {}", requestId);
+            
+            // 내부 도메인 객체로 변환 (필요 시에만)
+            LlmRequest request = LlmRequest.builder()
+                .chatRoomId(chatRoomId)
+                .userId(userId)
+                .userMessage(userMessage)
+                .requestId(requestId)
+                .build();
             
             // 비동기로 스트리밍 응답 생성
             generateStreamingResponseAsync(request);
             
         } catch (Exception e) {
-            log.error("Error processing LLM request from Kafka: {}", requestJson, e);
+            log.error("Error processing LLM request from Kafka: {}", jsonMessage, e);
         }
     }
 
@@ -149,134 +160,159 @@ public class LlmService {
         try {
             log.info("Generating streaming response for request: {}", request.getRequestId());
             
-            // 구직자 맞춤형 프롬프트 생성
-            String systemPrompt = createJobSeekerPrompt();
+            // 1. 스트리밍 준비
+            Flux<String> streamingResponse = prepareStreamingResponse(request);
+            SseEmitter emitter = validateAndGetEmitter(request.getChatRoomId());
             
-            // 실제 GPT API 스트리밍 호출
-            log.info("GPT API 스트리밍 호출 시작");
-            Flux<String> streamingResponse = gptClient.generateStreamingResponse(
-                request.getUserMessage(), 
-                systemPrompt
-            );
-            
-            // SSE Emitter 가져오기
-            SseEmitter emitter = chatRoomEmitters.get(request.getChatRoomId());
             if (emitter == null) {
-                log.error("No SSE emitter found for chat room: {}", request.getChatRoomId());
-                return CompletableFuture.completedFuture(null);
-            }
-            log.info("SSE emitter 찾음: {}", request.getChatRoomId());
-            
-            // 스트리밍 시작 이벤트 전송
-            try {
-                emitter.send(SseEmitter.event()
-                    .name("start")
-                    .data(Map.of(
-                        "requestId", request.getRequestId(),
-                        "chatRoomId", request.getChatRoomId()
-                    )));
-                log.info("시작 이벤트 전송 완료");
-            } catch (IOException e) {
-                log.error("Error sending start event", e);
                 return CompletableFuture.completedFuture(null);
             }
             
-            // 스트리밍 응답을 SSE로 실시간 전송
-            StringBuilder fullResponse = new StringBuilder();
+            // 2. 스트리밍 시작 이벤트 전송
+            if (!sendStartEvent(emitter, request)) {
+                return CompletableFuture.completedFuture(null);
+            }
             
-            log.info("스트리밍 응답 구독 시작 - requestId: {}", request.getRequestId());
-            
-            streamingResponse.subscribe(
-                // onNext: 각 청크 처리
-                chunk -> {
-                    try {
-                        log.info("GPT API에서 청크 수신: '{}'", chunk);
-                        
-                        // SSE로 실시간 청크 전송
-                        emitter.send(SseEmitter.event()
-                            .name("chunk")
-                            .data(chunk));
-                        
-                        // 전체 응답 누적
-                        fullResponse.append(chunk);
-                        
-                        log.info("청크 전송 완료: '{}'", chunk);
-                    } catch (IOException e) {
-                        log.error("Error sending chunk via SSE", e);
-                    }
-                },
-                // onError: 오류 처리
-                error -> {
-                    log.error("Error in streaming response", error);
-                    
-                    try {
-                        // 오류 이벤트를 SSE로 전송
-                        emitter.send(SseEmitter.event()
-                            .name("error")
-                            .data("스트리밍 중 오류가 발생했습니다: " + error.getMessage()));
-                    } catch (IOException e) {
-                        log.error("Error sending error event via SSE", e);
-                    }
-                    
-                    // 오류 이벤트를 Kafka로 발행
-                    kafkaTemplate.send("llm-error", Map.of(
-                        "chatRoomId", request.getChatRoomId(),
-                        "userId", request.getUserId(),
-                        "requestId", request.getRequestId(),
-                        "error", error.getMessage()
-                    ));
-                },
-                // onComplete: 완료 처리
-                () -> {
-                    try {
-                        String completeResponse = fullResponse.toString().trim();
-                        log.info("스트리밍 완료 - requestId: {}, 전체 응답 길이: {}", 
-                                request.getRequestId(), completeResponse.length());
-                        log.info("전체 응답 내용: '{}'", completeResponse);
-                        
-                        // 완료 이벤트를 SSE로 전송
-                        emitter.send(SseEmitter.event()
-                            .name("complete")
-                            .data(Map.of(
-                                "requestId", request.getRequestId(),
-                                "fullResponse", completeResponse
-                            )));
-                        
-                        log.info("완료 이벤트 전송됨");
-                        
-                        // SSE 연결 유지 - complete() 호출하지 않음
-                        // emitter.complete(); // 제거하여 연결 유지
-                        
-                        // 저장용 이벤트를 Kafka로 발행
-                        kafkaTemplate.send("llm-response", Map.of(
-                            "chatRoomId", request.getChatRoomId(),
-                            "userId", request.getUserId(),
-                            "requestId", request.getRequestId(),
-                            "message", completeResponse,
-                            "timestamp", System.currentTimeMillis()
-                        ));
-                        
-                        log.info("Published LLM response to Kafka for storage");
-                        
-                    } catch (Exception e) {
-                        log.error("Error completing streaming", e);
-                    }
-                }
-            );
+            // 3. 스트리밍 처리
+            processStreamingResponse(streamingResponse, emitter, request);
             
         } catch (Exception e) {
-            log.error("Error setting up streaming", e);
-            
-            // 오류 이벤트를 Kafka로 발행
-            kafkaTemplate.send("llm-error", Map.of(
-                "chatRoomId", request.getChatRoomId(),
-                "userId", request.getUserId(),
-                "requestId", request.getRequestId(),
-                "error", e.getMessage()
-            ));
+            handleStreamingSetupError(request, e);
         }
         
         return CompletableFuture.completedFuture(null);
+    }
+    
+    private Flux<String> prepareStreamingResponse(LlmRequest request) {
+        String systemPrompt = createJobSeekerPrompt();
+        log.info("GPT API 스트리밍 호출 시작");
+        
+        return gptClient.generateStreamingResponse(
+            request.getUserMessage(), 
+            systemPrompt
+        );
+    }
+    
+    private SseEmitter validateAndGetEmitter(String chatRoomId) {
+        SseEmitter emitter = chatRoomEmitters.get(chatRoomId);
+        if (emitter == null) {
+            log.error("No SSE emitter found for chat room: {}", chatRoomId);
+            return null;
+        }
+        log.info("SSE emitter 찾음: {}", chatRoomId);
+        return emitter;
+    }
+    
+    private boolean sendStartEvent(SseEmitter emitter, LlmRequest request) {
+        try {
+            emitter.send(SseEmitter.event()
+                .name("start")
+                .data(Map.of(
+                    "requestId", request.getRequestId(),
+                    "chatRoomId", request.getChatRoomId()
+                )));
+            log.info("시작 이벤트 전송 완료");
+            return true;
+        } catch (IOException e) {
+            log.error("Error sending start event", e);
+            return false;
+        }
+    }
+    
+    private void processStreamingResponse(Flux<String> streamingResponse, SseEmitter emitter, LlmRequest request) {
+        StringBuilder fullResponse = new StringBuilder();
+        log.info("스트리밍 응답 구독 시작 - requestId: {}", request.getRequestId());
+        
+        streamingResponse.subscribe(
+            chunk -> handleChunk(emitter, fullResponse, chunk),
+            error -> handleStreamingError(emitter, request, error),
+            () -> handleStreamingComplete(emitter, request, fullResponse)
+        );
+    }
+    
+    private void handleChunk(SseEmitter emitter, StringBuilder fullResponse, String chunk) {
+        try {
+            log.info("GPT API에서 청크 수신: '{}'", chunk);
+            
+            emitter.send(SseEmitter.event()
+                .name("chunk")
+                .data(chunk));
+            
+            fullResponse.append(chunk);
+            log.info("청크 전송 완료: '{}'", chunk);
+        } catch (IOException e) {
+            log.error("Error sending chunk via SSE", e);
+        }
+    }
+    
+    private void handleStreamingError(SseEmitter emitter, LlmRequest request, Throwable error) {
+        log.error("Error in streaming response", error);
+        
+        sendErrorEvent(emitter, error);
+        publishErrorToKafka(request, error);
+    }
+    
+    private void handleStreamingComplete(SseEmitter emitter, LlmRequest request, StringBuilder fullResponse) {
+        try {
+            String completeResponse = fullResponse.toString().trim();
+            log.info("스트리밍 완료 - requestId: {}, 전체 응답 길이: {}", 
+                    request.getRequestId(), completeResponse.length());
+            
+            sendCompleteEvent(emitter, request, completeResponse);
+            publishResponseToKafka(request, completeResponse);
+            
+        } catch (Exception e) {
+            log.error("Error completing streaming", e);
+        }
+    }
+    
+    private void sendErrorEvent(SseEmitter emitter, Throwable error) {
+        try {
+            emitter.send(SseEmitter.event()
+                .name("error")
+                .data("스트리밍 중 오류가 발생했습니다: " + error.getMessage()));
+        } catch (IOException e) {
+            log.error("Error sending error event via SSE", e);
+        }
+    }
+    
+    private void sendCompleteEvent(SseEmitter emitter, LlmRequest request, String completeResponse) {
+        try {
+            emitter.send(SseEmitter.event()
+                .name("complete")
+                .data(Map.of(
+                    "requestId", request.getRequestId(),
+                    "fullResponse", completeResponse
+                )));
+            log.info("완료 이벤트 전송됨");
+        } catch (IOException e) {
+            log.error("Error sending complete event", e);
+        }
+    }
+    
+    private void publishErrorToKafka(LlmRequest request, Throwable error) {
+        kafkaTemplate.send("llm-error", Map.of(
+            "chatRoomId", request.getChatRoomId(),
+            "userId", request.getUserId(),
+            "requestId", request.getRequestId(),
+            "error", error.getMessage()
+        ));
+    }
+    
+    private void publishResponseToKafka(LlmRequest request, String completeResponse) {
+        kafkaTemplate.send("llm-response", Map.of(
+            "chatRoomId", request.getChatRoomId(),
+            "userId", request.getUserId(),
+            "requestId", request.getRequestId(),
+            "message", completeResponse,
+            "timestamp", System.currentTimeMillis()
+        ));
+        log.info("Published LLM response to Kafka for storage");
+    }
+    
+    private void handleStreamingSetupError(LlmRequest request, Exception e) {
+        log.error("Error setting up streaming", e);
+        publishErrorToKafka(request, e);
     }
 
     /**
