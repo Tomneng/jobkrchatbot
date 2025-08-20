@@ -2,7 +2,7 @@ package backend.jobkrchatbot.llmservice.service;
 
 import backend.jobkrchatbot.llmservice.dto.LlmRequest;
 import backend.jobkrchatbot.llmservice.dto.LlmResponse;
-import backend.jobkrchatbot.llmservice.infrastructure.GptClient;
+import backend.jobkrchatbot.llmservice.infrastructure.ClaudeClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class LlmService {
 
-    private final GptClient gptClient;
+    private final ClaudeClient claudeClient;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
     
@@ -48,14 +48,15 @@ public class LlmService {
             SseEmitter emitter = entry.getValue();
             
             try {
+                String pingData = objectMapper.writeValueAsString(Map.of(
+                    "chatRoomId", chatRoomId,
+                    "timestamp", System.currentTimeMillis()
+                ));
                 emitter.send(SseEmitter.event()
                     .name("ping")
-                    .data(Map.of(
-                        "chatRoomId", chatRoomId,
-                        "timestamp", System.currentTimeMillis()
-                    )));
+                    .data(pingData));
                 return false; // 성공하면 유지
-            } catch (IOException e) {
+            } catch (Exception e) {
                 log.warn("Failed to send keep-alive to chat room: {}, removing connection", chatRoomId);
                 return true; // 실패하면 제거
             }
@@ -98,25 +99,19 @@ public class LlmService {
         
         // 연결 확인 이벤트 전송
         try {
+            String connectionData = objectMapper.writeValueAsString(Map.of(
+                "chatRoomId", chatRoomId,
+                "message", "SSE 연결이 설정되었습니다",
+                "timestamp", System.currentTimeMillis()
+            ));
             emitter.send(SseEmitter.event()
                 .name("connected")
-                .data(Map.of(
-                    "chatRoomId", chatRoomId,
-                    "message", "SSE 연결이 설정되었습니다",
-                    "timestamp", System.currentTimeMillis()
-                )));
-        } catch (IOException e) {
+                .data(connectionData));
+        } catch (Exception e) {
             log.error("Error sending connection event", e);
         }
         
         return emitter;
-    }
-
-    /**
-     * SSE Emitter 등록 (Chat Service에서 호출) - 하위 호환성용
-     */
-    public SseEmitter registerEmitter(String chatRoomId) {
-        return createStreamingConnection(chatRoomId);
     }
 
     /**
@@ -185,9 +180,9 @@ public class LlmService {
     
     private Flux<String> prepareStreamingResponse(LlmRequest request) {
         String systemPrompt = createJobSeekerPrompt();
-        log.info("GPT API 스트리밍 호출 시작");
+        log.info("Claude API 스트리밍 호출 시작");
         
-        return gptClient.generateStreamingResponse(
+        return claudeClient.generateStreamingResponse(
             request.getUserMessage(), 
             systemPrompt
         );
@@ -232,7 +227,7 @@ public class LlmService {
     
     private void handleChunk(SseEmitter emitter, StringBuilder fullResponse, String chunk) {
         try {
-            log.info("GPT API에서 청크 수신: '{}'", chunk);
+            log.info("Claude API에서 청크 수신: '{}'", chunk);
             
             emitter.send(SseEmitter.event()
                 .name("chunk")
@@ -278,36 +273,47 @@ public class LlmService {
     
     private void sendCompleteEvent(SseEmitter emitter, LlmRequest request, String completeResponse) {
         try {
+            String completeData = objectMapper.writeValueAsString(Map.of(
+                "requestId", request.getRequestId(),
+                "fullResponse", completeResponse
+            ));
             emitter.send(SseEmitter.event()
                 .name("complete")
-                .data(Map.of(
-                    "requestId", request.getRequestId(),
-                    "fullResponse", completeResponse
-                )));
+                .data(completeData));
             log.info("완료 이벤트 전송됨");
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.error("Error sending complete event", e);
         }
     }
     
     private void publishErrorToKafka(LlmRequest request, Throwable error) {
-        kafkaTemplate.send("llm-error", Map.of(
-            "chatRoomId", request.getChatRoomId(),
-            "userId", request.getUserId(),
-            "requestId", request.getRequestId(),
-            "error", error.getMessage()
-        ));
+        try {
+            String errorMessage = objectMapper.writeValueAsString(Map.of(
+                "chatRoomId", request.getChatRoomId(),
+                "userId", request.getUserId(),
+                "requestId", request.getRequestId(),
+                "error", error.getMessage()
+            ));
+            kafkaTemplate.send("llm-error", errorMessage);
+        } catch (Exception e) {
+            log.error("Failed to publish error to Kafka", e);
+        }
     }
     
     private void publishResponseToKafka(LlmRequest request, String completeResponse) {
-        kafkaTemplate.send("llm-response", Map.of(
-            "chatRoomId", request.getChatRoomId(),
-            "userId", request.getUserId(),
-            "requestId", request.getRequestId(),
-            "message", completeResponse,
-            "timestamp", System.currentTimeMillis()
-        ));
-        log.info("Published LLM response to Kafka for storage");
+        try {
+            String responseMessage = objectMapper.writeValueAsString(Map.of(
+                "chatRoomId", request.getChatRoomId(),
+                "userId", request.getUserId(),
+                "requestId", request.getRequestId(),
+                "message", completeResponse,
+                "timestamp", System.currentTimeMillis()
+            ));
+            kafkaTemplate.send("llm-response", responseMessage);
+            log.info("Published LLM response to Kafka for storage");
+        } catch (Exception e) {
+            log.error("Failed to publish response to Kafka", e);
+        }
     }
     
     private void handleStreamingSetupError(LlmRequest request, Exception e) {
@@ -315,35 +321,6 @@ public class LlmService {
         publishErrorToKafka(request, e);
     }
 
-    /**
-     * 기존 HTTP 엔드포인트용 (하위 호환성)
-     */
-    public LlmResponse generateResponse(LlmRequest request) {
-        try {
-            log.info("Generating response for chat room: {}, user: {}", 
-                    request.getChatRoomId(), request.getUserId());
-            
-            String systemPrompt = createJobSeekerPrompt();
-            String response = gptClient.generateResponse(request.getUserMessage(), systemPrompt);
-            
-            return LlmResponse.builder()
-                    .response(response)
-                    .chatRoomId(request.getChatRoomId())
-                    .userId(request.getUserId())
-                    .requestId(request.getRequestId())
-                    .build();
-                    
-        } catch (Exception e) {
-            log.error("Error generating response for request: {}", request.getRequestId(), e);
-            return LlmResponse.builder()
-                    .error("응답 생성 중 오류가 발생했습니다.")
-                    .chatRoomId(request.getChatRoomId())
-                    .userId(request.getUserId())
-                    .requestId(request.getRequestId())
-                    .build();
-        }
-    }
-    
     /**
      * 구직자를 위한 맞춤형 시스템 프롬프트를 생성합니다.
      * 이력서 기반 면접 질문 생성과 학습 경로 제안을 위한 프롬프트입니다.

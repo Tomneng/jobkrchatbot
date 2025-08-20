@@ -12,7 +12,7 @@ spring:
     bootstrap-servers: kafka:29092
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
     consumer:
       group-id: llm-service
       auto-offset-reset: earliest
@@ -26,6 +26,13 @@ openai:
     key: ${OPENAI_API_KEY}
     url: https://api.openai.com/v1/chat/completions
     model: gpt-4o
+
+claude:
+  api:
+    key: ${CLAUDE_API_KEY}
+    url: https://api.anthropic.com/v1/messages
+    model: claude-sonnet-4-20250514
+    version: 2023-06-01
 
 logging:
   level:

@@ -506,14 +506,14 @@
                     }
                 };
 
-                // 5초 후에도 연결이 안되면 타임아웃
+                // 30초 후에도 연결이 안되면 타임아웃
                 setTimeout(() => {
                     if (!connectionEstablished) {
                         eventSource.close();
                         currentEventSource = null;
                         reject(new Error('SSE 연결 타임아웃'));
                     }
-                }, 5000);
+                }, 30000);
             });
         }
 
