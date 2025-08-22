@@ -1,7 +1,6 @@
 package backend.jobkrchatbot.llmservice.service;
 
 import backend.jobkrchatbot.llmservice.dto.LlmRequest;
-import backend.jobkrchatbot.llmservice.dto.LlmResponse;
 import backend.jobkrchatbot.llmservice.infrastructure.ClaudeClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -73,27 +72,9 @@ public class LlmService {
             log.info("Reusing existing SSE emitter for chat room: {}", chatRoomId);
             return existingEmitter;
         }
-        
-        SseEmitter emitter = new SseEmitter(1800000L); // 30분 타임아웃 (1800초)
-        
-        // 연결 완료 시 처리
-        emitter.onCompletion(() -> {
-            log.info("SSE emitter completed for chat room: {}", chatRoomId);
-            chatRoomEmitters.remove(chatRoomId);
-        });
-        
-        // 타임아웃 시 처리
-        emitter.onTimeout(() -> {
-            log.info("SSE emitter timeout for chat room: {}", chatRoomId);
-            chatRoomEmitters.remove(chatRoomId);
-        });
-        
-        // 오류 시 처리
-        emitter.onError((ex) -> {
-            log.error("SSE emitter error for chat room: {}", chatRoomId, ex);
-            chatRoomEmitters.remove(chatRoomId);
-        });
-        
+
+        SseEmitter emitter = getSseEmitter(chatRoomId);
+
         chatRoomEmitters.put(chatRoomId, emitter);
         log.info("SSE emitter created for chat room: {} with 30min timeout", chatRoomId);
         
@@ -111,6 +92,29 @@ public class LlmService {
             log.error("Error sending connection event", e);
         }
         
+        return emitter;
+    }
+
+    private SseEmitter getSseEmitter(String chatRoomId) {
+        SseEmitter emitter = new SseEmitter(1800000L); // 30분 타임아웃 (1800초)
+
+        // 연결 완료 시 처리
+        emitter.onCompletion(() -> {
+            log.info("SSE emitter completed for chat room: {}", chatRoomId);
+            chatRoomEmitters.remove(chatRoomId);
+        });
+
+        // 타임아웃 시 처리
+        emitter.onTimeout(() -> {
+            log.info("SSE emitter timeout for chat room: {}", chatRoomId);
+            chatRoomEmitters.remove(chatRoomId);
+        });
+
+        // 오류 시 처리
+        emitter.onError((ex) -> {
+            log.error("SSE emitter error for chat room: {}", chatRoomId, ex);
+            chatRoomEmitters.remove(chatRoomId);
+        });
         return emitter;
     }
 
@@ -481,7 +485,7 @@ public class LlmService {
             -합격률 향상을 위한 구체적인 액션 플랜을 제안된 학습 경로가 얼마나 구체적이고 현실적인 가이드가 되는지를 고려하여 답변해주세요. 이 때, 사용자mbti를 고려해서 적절한 학습방식을 추천해줘
             
             응답은 한국어로 작성하고, 구체적이고 실용적인 내용으로 구성해주세요.
-            또한, 답변시 불필요한 #,* 등은 없이 답변하고, 사용자 메세지가 자신의 경력에 대한 내용이 아닌경우, 보편적인 답변을 해주세요.
+            사용자 메세지가 자신의 경력에 대한 내용이 아닌경우, 보편적인 답변을 해주세요.
             사용자 메세지에서 mbti가 유추 가능한 경우, 해당 성향의 사람이 가장 선호하는 방식으로 소통해주세요.
             """;
     }

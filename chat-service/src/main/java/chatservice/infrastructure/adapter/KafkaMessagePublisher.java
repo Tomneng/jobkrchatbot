@@ -17,8 +17,7 @@ import java.util.Map;
 public class KafkaMessagePublisher implements MessagePublisher {
     
     private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final ObjectMapper objectMapper;
-    
+
     private static final String CHAT_EVENTS_TOPIC = "chat-events";
     private static final String USER_MESSAGES_TOPIC = "user-messages";
     private static final String LLM_REQUESTS_TOPIC = "llm-request";

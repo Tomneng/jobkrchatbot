@@ -15,27 +15,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class LlmIntegrationService {
     
-    private final LlmService llmService;
     private final MessagePublisher messagePublisher;
-    
-    /**
-     * 동기 LLM 응답 생성
-     */
-    public String generateSyncResponse(SendMessageRequest request) {
-        String requestId = UUID.randomUUID().toString();
-        
-        try {
-            return llmService.generateResponse(
-                request.getChatRoomId(), 
-                request.getUserId(), 
-                request.getMessage(), 
-                requestId
-            );
-        } catch (Exception e) {
-            log.error("Error getting LLM response for chat room: {}", request.getChatRoomId(), e);
-            return "죄송합니다. 현재 서비스에 문제가 발생했습니다. 잠시 후 다시 시도해주세요.";
-        }
-    }
     
     /**
      * 비동기 스트리밍 LLM 요청 발행

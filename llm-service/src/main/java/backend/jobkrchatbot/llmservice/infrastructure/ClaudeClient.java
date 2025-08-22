@@ -35,10 +35,6 @@ public class ClaudeClient {
     @Value("${claude.api.version}")
     private String apiVersion;
 
-    public String generateResponse(String userPrompt, String systemPrompt) {
-        return callClaudeApi(userPrompt, systemPrompt, 2000).block();
-    }
-
     /**
      * Claude API 스트리밍 응답 생성 (응답 파싱만 담당)
      */
@@ -101,49 +97,4 @@ public class ClaudeClient {
         }
     }
 
-    private Mono<String> callClaudeApi(String userPrompt, String systemPrompt, int maxTokens) {
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("x-api-key", apiKey);
-            headers.set("anthropic-version", apiVersion);
-
-            Map<String, Object> requestBody = Map.of(
-                "model", model,
-                "max_tokens", maxTokens,
-                "system", systemPrompt,
-                "messages", List.of(
-                    Map.of("role", "user", "content", userPrompt)
-                )
-            );
-
-            return webClient.post()
-                .uri(apiUrl)
-                .headers(h -> h.putAll(headers))
-                .bodyValue(requestBody)
-                .retrieve()
-                .bodyToMono(Map.class)
-                .map(this::extractContentFromResponse)
-                .onErrorReturn("API 호출 중 오류가 발생했습니다.");
-
-        } catch (Exception e) {
-            log.error("Error calling Claude API", e);
-            return Mono.just("API 호출 중 오류가 발생했습니다.");
-        }
-    }
-
-    private String extractContentFromResponse(Map<String, Object> response) {
-        if (response != null && response.containsKey("content")) {
-            List<Map<String, Object>> content = (List<Map<String, Object>>) response.get("content");
-            if (!content.isEmpty()) {
-                Map<String, Object> firstContent = content.get(0);
-                if ("text".equals(firstContent.get("type"))) {
-                    return (String) firstContent.get("text");
-                }
-            }
-        }
-
-        log.error("Failed to get response from Claude API: {}", response);
-        return "응답 생성 중 오류가 발생했습니다.";
-    }
 } 
