@@ -2,8 +2,20 @@ FROM openjdk:17-jdk-slim
 
 WORKDIR /app
 
-COPY build/libs/*.jar app.jar
+# Gradle wrapper와 build 파일들 복사
+COPY gradlew .
+COPY gradle gradle
+COPY build.gradle .
+COPY settings.gradle .
 
-EXPOSE 8080
+# Chat service 소스 복사
+COPY api-gateway api-gateway
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# 실행 권한 부여
+RUN chmod +x ./gradlew
+
+# 의존성 다운로드 및 빌드
+RUN ./gradlew :api-gateway:build -x test
+
+# JAR 파일 실행
+ENTRYPOINT ["java", "-jar", "api-gateway/build/libs/api-gateway-0.0.1-SNAPSHOT.jar"]

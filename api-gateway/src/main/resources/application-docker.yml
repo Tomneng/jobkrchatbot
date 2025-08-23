@@ -4,8 +4,21 @@ server:
 spring:
   application:
     name: api-gateway
+  
+  # Redis 설정 (Docker 환경)
+  data:
+    redis:
+      host: redis
+      port: 6379
+      timeout: 2000ms
+  
   cloud:
     gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      
       routes:
         # Chat Service 라우팅 (Docker 환경)
         - id: chat-service
@@ -14,6 +27,23 @@ spring:
             - Path=/api/chat/**
           filters:
             - StripPrefix=0
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenish-rate: 10
+                redis-rate-limiter.burst-capacity: 20
+            - name: CircuitBreaker
+              args:
+                name: chat-service-circuit-breaker
+                fallbackUri: forward:/fallback/chat
+            - name: Retry
+              args:
+                retries: 3
+                statuses: BAD_GATEWAY,INTERNAL_SERVER_ERROR
+                methods: GET,POST
+                backoff:
+                  first-backoff: 100ms
+                  max-backoff: 1000ms
+                  factor: 2
             
         # LLM Service 라우팅 (Docker 환경)
         - id: llm-service
@@ -22,35 +52,88 @@ spring:
             - Path=/api/llm/**
           filters:
             - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenish-rate: 5
+                redis-rate-limiter.burst-capacity: 10
             - name: CircuitBreaker
               args:
                 name: llm-service-circuit-breaker
                 fallbackUri: forward:/fallback/llm
+            - name: Retry
+              args:
+                retries: 2
+                statuses: BAD_GATEWAY,INTERNAL_SERVER_ERROR
+                methods: GET,POST
+                backoff:
+                  first-backoff: 200ms
+                  max-backoff: 2000ms
+                  factor: 2
                 
-        # LLM Service 직접 접근 (기존 프록시 엔드포인트 대체)
-        - id: llm-service-direct
-          uri: http://llm-service:8082
+        # Health Check 라우팅
+        - id: health-check
+          uri: http://chat-service:8081
           predicates:
-            - Path=/api/chat/llm-service-url
+            - Path=/health/**
           filters:
-            - RewritePath=/api/chat/llm-service-url, /api/llm/service-url
+            - StripPrefix=1
+            
+        # API Documentation 라우팅
+        - id: api-docs
+          uri: http://chat-service:8081
+          predicates:
+            - Path=/api-docs/**
+          filters:
+            - StripPrefix=1
 
 # Circuit Breaker 설정
 resilience4j:
   circuitbreaker:
     instances:
+      chat-service-circuit-breaker:
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
       llm-service-circuit-breaker:
         sliding-window-size: 10
         minimum-number-of-calls: 5
         failure-rate-threshold: 50
         wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+
+# Rate Limiting 설정
+  ratelimiter:
+    instances:
+      default:
+        limit-for-period: 100
+        limit-refresh-period: 1s
+        timeout-duration: 1s
 
 # Actuator 설정
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,gateway
+        include: health,info,gateway,circuitbreakers,ratelimiters
+      base-path: /actuator
   endpoint:
     health:
       show-details: always
+      show-components: always
+  health:
+    circuitbreakers:
+      enabled: true
+    ratelimiters:
+      enabled: true
+
+# Logging 설정
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    org.springframework.web.reactive: DEBUG
+    reactor.netty: DEBUG
+    backend.jobkrchatbot.apigateway: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

@@ -1,128 +1,157 @@
-# JobKR Chatbot MSA
+# JobKR Chatbot - MSA Architecture
 
-취업 상담 챗봇을 MSA(Microservice Architecture)로 구현한 프로젝트입니다.
+## 개요
+Spring Boot 기반의 MSA(Microservice Architecture) 채팅봇 시스템입니다.
 
-## 🏗️ 아키텍처
+## 아키텍처
+- **API Gateway**: Spring Cloud Gateway를 사용한 통합 게이트웨이
+- **Chat Service**: 채팅 기능을 담당하는 마이크로서비스
+- **LLM Service**: AI 모델과의 통신을 담당하는 마이크로서비스
+- **Kafka**: 메시지 브로커링 및 비동기 통신
+- **PostgreSQL**: 채팅 데이터 저장
+- **Redis**: Rate Limiting 및 캐싱
 
+## Spring Cloud Gateway 기능
+
+### 주요 기능
+- **라우팅**: 각 마이크로서비스로의 요청 라우팅
+- **Circuit Breaker**: Resilience4j를 사용한 장애 격리
+- **Rate Limiting**: Redis 기반 요청 제한
+- **Retry**: 자동 재시도 메커니즘
+- **CORS**: Cross-Origin 요청 지원
+- **Security Headers**: 보안 헤더 자동 추가
+- **Logging**: 요청/응답 로깅
+
+### 라우팅 규칙
 ```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│   Client   │    │ API Gateway │    │ Chat Service│
-│             │◄──►│   (8080)   │◄──►│   (8081)   │
-└─────────────┘    └─────────────┘    └─────────────┘
-                          │                   │
-                          ▼                   ▼
-                   ┌─────────────┐    ┌─────────────┐
-                   │User Service │    │ LLM Service │
-                   │   (8083)   │    │   (8082)   │
-                   └─────────────┘    └─────────────┘
-                                              │
-                                              ▼
-                                     ┌─────────────┐
-                                     │   Claude   │
-                                     │     API    │
-                                     └─────────────┘
+/api/chat/** → Chat Service (8081)
+/api/llm/** → LLM Service (8082)
+/health/** → Health Check
+/api-docs/** → API Documentation
 ```
 
-## 🚀 서비스 구성
+### Circuit Breaker 설정
+- **Chat Service**: 10개 요청 중 50% 실패 시 Circuit Open
+- **LLM Service**: 10개 요청 중 50% 실패 시 Circuit Open
+- **Fallback**: 서비스 장애 시 적절한 응답 제공
 
-### 1. **Chat Service (8081)**
-- 사용자 채팅 세션 관리
-- 채팅 히스토리 저장/조회
-- Kafka를 통한 LLM 요청 전송
+### Rate Limiting 설정
+- **Chat Service**: 초당 10개 요청, 최대 20개 버스트
+- **LLM Service**: 초당 5개 요청, 최대 10개 버스트
 
-### 2. **LLM Service (8082)**
-- Claude API 연동
-- Kafka를 통한 비동기 요청 처리
-- AI 응답 생성
+## 실행 방법
 
-### 3. **User Service (8083)**
-- 사용자 인증/인가
-- 사용자 프로필 관리
+### 1. 환경 변수 설정
+```bash
+# .env 파일 생성
+POSTGRES_DB=jobkrchatbot
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=password
+REDIS_PORT=6379
+OPENAI_API_KEY=your_openai_api_key
+CLAUDE_API_KEY=your_claude_api_key
+```
 
-### 4. **API Gateway (8080)**
-- 모든 서비스의 진입점
-- 라우팅 및 로드 밸런싱
-
-### 5. **Common Library**
-- 공통 DTO 및 응답 클래스
-- 모든 서비스에서 공유
-
-## 🛠️ 기술 스택
-
-- **Framework**: Spring Boot 3.5.4
-- **Message Broker**: Apache Kafka
-- **Database**: PostgreSQL
-- **Cache**: Redis
-- **API Gateway**: Spring Cloud Gateway
-- **Language**: Java 17
-
-## 📋 실행 방법
-
-### 1. 인프라 실행
+### 2. Docker Compose로 실행
 ```bash
 docker-compose up -d
 ```
 
-### 2. 각 서비스 실행
+### 3. 개별 서비스 실행
 ```bash
-# Chat Service
-cd chat-service && ./gradlew bootRun
-
-# LLM Service  
-cd llm-service && ./gradlew bootRun
-
-# User Service
-cd user-service && ./gradlew bootRun
-
 # API Gateway
-cd api-gateway && ./gradlew bootRun
+cd api-gateway
+./gradlew bootRun
+
+# Chat Service
+cd chat-service
+./gradlew bootRun
+
+# LLM Service
+cd llm-service
+./gradlew bootRun
 ```
 
-### 3. 환경 변수 설정
+## API 엔드포인트
+
+### API Gateway (8080)
+- `GET /actuator/health` - 게이트웨이 상태 확인
+- `GET /actuator/gateway` - 라우트 정보
+- `GET /health/gateway` - 게이트웨이 헬스체크
+- `GET /health/circuit-breakers` - Circuit Breaker 상태
+
+### Chat Service (8081)
+- `POST /api/chat/start` - 채팅 시작
+- `POST /api/chat/send` - 메시지 전송
+- `GET /api/chat/history/{roomId}` - 채팅 기록 조회
+
+### LLM Service (8082)
+- `POST /api/llm/chat` - AI 응답 생성
+
+## 모니터링
+
+### Actuator 엔드포인트
+- `/actuator/health` - 전체 시스템 상태
+- `/actuator/gateway` - 게이트웨이 라우트 정보
+- `/actuator/circuitbreakers` - Circuit Breaker 상태
+- `/actuator/ratelimiters` - Rate Limiter 상태
+
+### 로깅
+- Spring Cloud Gateway: DEBUG 레벨
+- 요청/응답 로깅: 자동으로 모든 요청 기록
+- 성능 모니터링: 응답 시간 측정
+
+## 개발 환경
+
+### 요구사항
+- Java 17+
+- Gradle 7.6+
+- Docker & Docker Compose
+- Redis (Rate Limiting용)
+
+### 프로젝트 구조
+```
+jobkrchatbot/
+├── api-gateway/          # Spring Cloud Gateway
+├── chat-service/         # 채팅 서비스
+├── llm-service/          # LLM 서비스
+├── compose.yaml          # Docker Compose 설정
+└── README.md
+```
+
+## 문제 해결
+
+### Kafka 에러
 ```bash
-export ANTHROPIC_API_KEY="your-claude-api-key"
+# 기존 프로세스 종료
+taskkill /F /IM java.exe
+
+# 데이터 정리
+rmdir /s /q C:\tmp\zookeeper
+rmdir /s /q C:\tmp\kafka-logs
+
+# clean-all.bat 실행
+clean-all.bat
 ```
 
-## 🔄 비동기 통신 흐름
+### Redis 연결 에러
+```bash
+# Redis 컨테이너 상태 확인
+docker ps | grep redis
 
-1. **사용자 메시지 전송**
-   ```
-   Client → API Gateway → Chat Service
-   ```
+# Redis 재시작
+docker-compose restart redis
+```
 
-2. **LLM 요청 처리**
-   ```
-   Chat Service → Kafka → LLM Service
-   ```
+## 성능 최적화
 
-3. **AI 응답 생성**
-   ```
-   LLM Service → Claude API → LLM Service
-   ```
+### Gateway 설정
+- Circuit Breaker로 장애 격리
+- Rate Limiting으로 과부하 방지
+- Retry 메커니즘으로 일시적 장애 대응
+- 보안 헤더 자동 추가
 
-4. **응답 전달**
-   ```
-   LLM Service → Kafka → Chat Service → Client
-   ```
-
-## 📊 모니터링
-
-- **Kafka UI**: http://localhost:8080
-- **Chat Service**: http://localhost:8081
-- **LLM Service**: http://localhost:8082
-- **User Service**: http://localhost:8083
-- **API Gateway**: http://localhost:8080
-
-## 🎯 주요 특징
-
-- **비동기 처리**: Kafka를 통한 메시지 기반 통신
-- **독립 배포**: 각 서비스별 독립적인 배포 가능
-- **확장성**: 서비스별 독립적인 스케일링
-- **장애 격리**: 한 서비스의 장애가 다른 서비스에 영향 최소화
-
-## 🔧 개발 환경
-
-- **IDE**: IntelliJ IDEA / VS Code
-- **Build Tool**: Gradle
-- **Container**: Docker & Docker Compose
-- **OS**: Windows / macOS / Linux 
+### 모니터링
+- Actuator를 통한 실시간 상태 모니터링
+- 상세한 로깅으로 디버깅 지원
+- 성능 메트릭 수집 
