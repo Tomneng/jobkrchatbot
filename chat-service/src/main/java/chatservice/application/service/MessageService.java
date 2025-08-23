@@ -44,38 +44,7 @@ public class MessageService {
         
         chatRepository.save(chatRoom);
     }
-    
-    /**
-     * 일반적인 메시지 저장 (SaveMessageRequest용)
-     */
-    public void saveMessage(SaveMessageRequest request) {
-        log.info("Saving message for chat room: {}", request.getChatRoomId());
-        
-        try {
-            ChatRoom chatRoom = findChatRoom(request.getChatRoomId());
-            
-            ChatMessage message = new ChatMessage(
-                request.getChatRoomId(),
-                request.getUserId(),
-                request.getMessage()
-            );
-            
-            chatRoom.addMessage(message);
-            chatRepository.save(chatRoom);
-            
-            // 메시지 저장 이벤트 발행
-            messagePublisher.publishChatEvent(
-                request.getChatRoomId(), 
-                "MESSAGE_SAVED", 
-                request.getUserId()
-            );
-            
-        } catch (Exception e) {
-            log.error("Error saving message for chat room: {}", request.getChatRoomId(), e);
-            throw new RuntimeException("메시지 저장 중 오류가 발생했습니다.", e);
-        }
-    }
-    
+
     /**
      * Kafka로부터 받은 LLM 응답 저장
      */

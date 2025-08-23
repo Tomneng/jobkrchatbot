@@ -10,6 +10,5 @@ import java.util.List;
 public interface SpringDataChatRepository extends JpaRepository<ChatRoom, String> {
     
     List<ChatRoom> findByUserIdOrderByCreatedAtDesc(String userId);
-    
-    boolean existsByUserId(String userId);
+
 }

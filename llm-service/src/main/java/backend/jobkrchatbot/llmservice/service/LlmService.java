@@ -39,9 +39,7 @@ public class LlmService {
         if (chatRoomEmitters.isEmpty()) {
             return;
         }
-        
-        log.debug("Sending keep-alive to {} SSE connections", chatRoomEmitters.size());
-        
+
         chatRoomEmitters.entrySet().removeIf(entry -> {
             String chatRoomId = entry.getKey();
             SseEmitter emitter = entry.getValue();
@@ -482,7 +480,7 @@ public class LlmService {
             맞춤형 면접 질문 제공 시, 해당 질문의 이유와 생성된 면접 질문이 실제 면접에 얼마나 도움이 되는지를 고려하여 제공해주세요.
             
             자기 개발 학습 경로
-            -합격률 향상을 위한 구체적인 액션 플랜을 제안된 학습 경로가 얼마나 구체적이고 현실적인 가이드가 되는지를 고려하여 답변해주세요. 이 때, 사용자mbti를 고려해서 적절한 학습방식을 추천해줘
+            -합격률 향상을 위한 구체적인 액션 플랜을 제안된 학습 경로가 얼마나 구체적이고 현실적인 가이드가 되는지를 고려하여 답변해주세요. 이 때, 사용자 mbti를 고려해서 적절한 학습방식을 추천해줘
             
             응답은 한국어로 작성하고, 구체적이고 실용적인 내용으로 구성해주세요.
             사용자 메세지가 자신의 경력에 대한 내용이 아닌경우, 보편적인 답변을 해주세요.

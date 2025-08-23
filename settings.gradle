@@ -1,5 +1,5 @@
 rootProject.name = 'jobKoreaChatbot'
 
+include 'api-gateway'
 include 'chat-service'
 include 'llm-service'
-include 'user-service' 

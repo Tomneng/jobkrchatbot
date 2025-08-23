@@ -300,19 +300,19 @@
         // 연결 상태 확인
         async function checkConnection() {
             try {
-                // 채팅 서비스 연결 확인
-                const chatResponse = await fetch('http://localhost:8081/api/chat/llm-service-url');
+                // API Gateway를 통해 채팅 서비스 연결 확인
+                const chatResponse = await fetch('http://localhost:8080/api/chat/llm-service-url');
                 if (chatResponse.ok) {
-                    updateConnectionStatus('Chat Service 연결됨', 'connected');
+                    updateConnectionStatus('API Gateway & Chat Service 연결됨', 'connected');
                 } else {
-                    updateConnectionStatus(`Chat Service 연결 실패 (${chatResponse.status})`, 'error');
+                    updateConnectionStatus(`API Gateway 연결 실패 (${chatResponse.status})`, 'error');
                 }
 
-                // LLM 서비스 연결 확인
+                // API Gateway를 통해 LLM 서비스 연결 확인
                 try {
-                    const llmResponse = await fetch('http://localhost:8082/api/llm/stream/test');
+                    const llmResponse = await fetch('http://localhost:8080/api/llm/stream/test');
                     if (llmResponse.ok || llmResponse.status === 405) { // 405는 Method Not Allowed (GET 요청이므로 정상)
-                        updateConnectionStatus('Chat Service & LLM Service 연결됨', 'connected');
+                        updateConnectionStatus('API Gateway & 모든 서비스 연결됨', 'connected');
                     } else {
                         updateConnectionStatus(`LLM Service 연결 실패 (${llmResponse.status})`, 'error');
                     }
@@ -321,7 +321,7 @@
                 }
             } catch (error) {
                 console.error('연결 확인 오류:', error);
-                updateConnectionStatus('Chat Service 연결 실패: 서버가 실행 중인지 확인하세요', 'error');
+                updateConnectionStatus('API Gateway 연결 실패: 서버가 실행 중인지 확인하세요', 'error');
             }
         }
 
@@ -333,7 +333,7 @@
         // 새 채팅 시작
         async function startNewChat() {
             try {
-                const response = await fetch('http://localhost:8081/api/chat/start', {
+                const response = await fetch('http://localhost:8080/api/chat/start', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -412,7 +412,7 @@
 
                 // 2. SSE 연결이 준비된 후 메시지 전송
                 console.log('SSE 연결 준비 완료, 메시지 전송 시작');
-                const response = await fetch('http://localhost:8081/api/chat/message/stream', {
+                const response = await fetch('http://localhost:8080/api/chat/message/stream', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -439,7 +439,7 @@
         // SSE 연결 생성 함수
         function createSSEConnection() {
             return new Promise((resolve, reject) => {
-                const eventSource = new EventSource(`http://localhost:8082/api/llm/stream/${currentChatRoomId}`);
+                const eventSource = new EventSource(`http://localhost:8080/api/llm/stream/${currentChatRoomId}`);
                 currentEventSource = eventSource;
 
                 let assistantMessageElement = null;

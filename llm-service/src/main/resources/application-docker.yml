@@ -9,15 +9,23 @@ spring:
     enabled: false
   
   kafka:
-    bootstrap-servers: kafka:29092
+    bootstrap-servers: kafka1:29092,kafka2:29093
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # Exactly-Once 보장 설정
+      enable-idempotence: true
+      acks: all
+      retries: 3
+      max-in-flight-requests-per-connection: 1
     consumer:
       group-id: llm-service
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # Exactly-Once 보장 설정
+      isolation-level: read_committed
+      enable-auto-commit: false
       properties:
         spring.json.trusted.packages: "*"
 

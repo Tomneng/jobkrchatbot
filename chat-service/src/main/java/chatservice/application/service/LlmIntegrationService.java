@@ -1,6 +1,5 @@
 package chatservice.application.service;
 
-import chatservice.domain.port.LlmService;
 import chatservice.domain.port.MessagePublisher;
 import chatservice.infrastructure.client.dto.LlmRequest;
 import chatservice.application.dto.SendMessageRequest;

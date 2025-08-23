@@ -1,5 +1,6 @@
 package chatservice.infrastructure.adapter;
 
+import chatservice.domain.model.ChatMessage;
 import chatservice.domain.model.ChatRoom;
 import chatservice.domain.port.ChatRepository;
 import lombok.RequiredArgsConstructor;
@@ -31,5 +32,15 @@ public class JpaChatRepository implements ChatRepository {
     @Override
     public List<ChatRoom> findByUserId(String userId) {
         return chatRepository.findByUserIdOrderByCreatedAtDesc(userId);
+    }
+
+    @Override
+    public List<ChatMessage> findAllChat() {
+        List<ChatRoom> allChatRooms = chatRepository.findAll();
+        
+        return allChatRooms.stream()
+                .filter(chatRoom -> chatRoom.getMessages() != null)
+                .flatMap(chatRoom -> chatRoom.getMessages().stream())
+                .toList();
     }
 }

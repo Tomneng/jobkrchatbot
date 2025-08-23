@@ -1,0 +1,56 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        # Chat Service 라우팅 (Docker 환경)
+        - id: chat-service
+          uri: http://chat-service:8081
+          predicates:
+            - Path=/api/chat/**
+          filters:
+            - StripPrefix=0
+            
+        # LLM Service 라우팅 (Docker 환경)
+        - id: llm-service
+          uri: http://llm-service:8082
+          predicates:
+            - Path=/api/llm/**
+          filters:
+            - StripPrefix=1
+            - name: CircuitBreaker
+              args:
+                name: llm-service-circuit-breaker
+                fallbackUri: forward:/fallback/llm
+                
+        # LLM Service 직접 접근 (기존 프록시 엔드포인트 대체)
+        - id: llm-service-direct
+          uri: http://llm-service:8082
+          predicates:
+            - Path=/api/chat/llm-service-url
+          filters:
+            - RewritePath=/api/chat/llm-service-url, /api/llm/service-url
+
+# Circuit Breaker 설정
+resilience4j:
+  circuitbreaker:
+    instances:
+      llm-service-circuit-breaker:
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+
+# Actuator 설정
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    health:
+      show-details: always

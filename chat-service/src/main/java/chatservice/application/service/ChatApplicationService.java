@@ -63,13 +63,6 @@ public class ChatApplicationService {
     }
     
     /**
-     * 메시지 저장 (외부 요청)
-     */
-    public void saveMessage(SaveMessageRequest request) {
-        messageService.saveMessage(request);
-    }
-    
-    /**
      * 채팅 히스토리 조회
      */
     public ChatHistoryResponse getChatHistory(String chatRoomId) {
@@ -95,6 +88,12 @@ public class ChatApplicationService {
         return chatRooms.stream()
                 .map(ChatRoomSummaryResponse::from)
                 .toList();
+    }
+    /**
+     * 모든 채팅 메시지 조회
+     */
+    public List<ChatMessage> getAllChatMessages() {
+        return chatRepository.findAllChat();
     }
 
     /**

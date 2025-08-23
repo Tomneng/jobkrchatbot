@@ -11,36 +11,109 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      # 로그 레벨을 WARN으로 설정하여 불필요한 로그 감소
+      ZOOKEEPER_LOG_LEVEL: WARN
+      # 로그 파일 크기 제한 (기본값: 100MB)
+      ZOOKEEPER_MAX_LOG_SIZE: 50MB
+      # 로그 파일 보관 개수 제한
+      ZOOKEEPER_MAX_LOG_COUNT: 5
     volumes:
       - zookeeper-data:/var/lib/zookeeper/data
       - zookeeper-logs:/var/lib/zookeeper/log
+    # 로그 드라이버 설정으로 로그 크기 제한
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - msa-network
 
-  kafka:
+  # Kafka Broker 1
+  kafka1:
     image: confluentinc/cp-kafka:7.4.0
-    hostname: kafka
-    container_name: kafka
+    hostname: kafka1
+    container_name: kafka1
     depends_on:
       - zookeeper
     ports:
       - "9092:9092"
       - "9101:9101"
     environment:
-      KAFKA_BROKER_ID: ${KAFKA_BROKER_ID}
+      KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 2
+      KAFKA_MIN_INSYNC_REPLICAS: 2
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_JMX_PORT: ${KAFKA_JMX_PORT}
+      KAFKA_JMX_PORT: 9101
       KAFKA_JMX_HOSTNAME: localhost
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
       KAFKA_DELETE_TOPIC_ENABLE: 'true'
+      # Exactly-Once 설정
+      KAFKA_ENABLE_IDEMPOTENCE: 'true'
+      KAFKA_TRANSACTION_MAX_TIMEOUT_MS: 900000
+      KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS: 50
+      KAFKA_TRANSACTION_STATE_LOG_SEGMENT_BYTES: 1048576
+      # 로그 레벨 설정
+      KAFKA_LOG4J_ROOT_LOGLEVEL: WARN
+      KAFKA_LOG4J_LOGGERS: "kafka.controller=WARN,state.change.logger=WARN"
     volumes:
-      - kafka-data:/var/lib/kafka/data
+      - kafka1-data:/var/lib/kafka/data
+    # 로그 드라이버 설정
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - msa-network
+
+  # Kafka Broker 2
+  kafka2:
+    image: confluentinc/cp-kafka:7.4.0
+    hostname: kafka2
+    container_name: kafka2
+    depends_on:
+      - zookeeper
+    ports:
+      - "9093:9093"
+      - "9102:9102"
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:29093,PLAINTEXT_HOST://localhost:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 2
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_JMX_PORT: 9102
+      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_DELETE_TOPIC_ENABLE: 'true'
+      # Exactly-Once 설정
+      KAFKA_ENABLE_IDEMPOTENCE: 'true'
+      KAFKA_TRANSACTION_MAX_TIMEOUT_MS: 900000
+      KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS: 50
+      KAFKA_TRANSACTION_STATE_LOG_SEGMENT_BYTES: 1048576
+      # 로그 레벨 설정
+      KAFKA_LOG4J_ROOT_LOGLEVEL: WARN
+      KAFKA_LOG4J_LOGGERS: "kafka.controller=WARN,state.change.logger=WARN"
+    volumes:
+      - kafka2-data:/var/lib/kafka/data
+    # 로그 드라이버 설정
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - msa-network
 
@@ -70,17 +143,34 @@ services:
     networks:
       - msa-network
 
+  # API Gateway
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      - chat-service
+      - llm-service
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    networks:
+      - msa-network
+
   # Kafka UI
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
     depends_on:
-      - kafka
+      - kafka1
+      - kafka2
     ports:
-      - "8080:8080"
+      - "8083:8080"
     environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_NAME: local-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka1:29092,kafka2:29093
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
     networks:
       - msa-network
@@ -96,13 +186,14 @@ services:
     depends_on:
       - postgres
       - redis
-      - kafka
+      - kafka1
+      - kafka2
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka1:29092,kafka2:29093
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: ${REDIS_PORT}
     networks:
@@ -117,10 +208,11 @@ services:
     ports:
       - "8082:8082"
     depends_on:
-      - kafka
+      - kafka1
+      - kafka2
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka1:29092,kafka2:29093
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       CLAUDE_API_KEY: ${CLAUDE_API_KEY}
     networks:
@@ -129,7 +221,8 @@ services:
 volumes:
   zookeeper-data:
   zookeeper-logs:
-  kafka-data:
+  kafka1-data:
+  kafka2-data:
   postgres-data:
   redis-data:
 
