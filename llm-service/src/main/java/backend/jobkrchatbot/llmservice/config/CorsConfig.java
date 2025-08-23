@@ -8,10 +8,11 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-@Configuration
+// API Gateway에서 CORS를 처리하므로 LLM Service의 CORS 설정은 비활성화
+// @Configuration
 public class CorsConfig implements WebMvcConfigurer {
 
-    @Override
+    // @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
                 .allowedOriginPatterns("*")
@@ -21,7 +22,7 @@ public class CorsConfig implements WebMvcConfigurer {
                 .maxAge(3600);
     }
 
-    @Bean
+    // @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.addAllowedOriginPattern("*");

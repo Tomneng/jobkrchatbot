@@ -14,29 +14,19 @@ public class SecurityHeadersFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        return chain.filter(exchange)
-            .then(Mono.fromRunnable(() -> {
-                ServerHttpResponse response = exchange.getResponse();
-                HttpHeaders headers = response.getHeaders();
-                
-                // 보안 헤더 추가
-                headers.add("X-Content-Type-Options", "nosniff");
-                headers.add("X-Frame-Options", "DENY");
-                headers.add("X-XSS-Protection", "1; mode=block");
-                headers.add("Referrer-Policy", "strict-origin-when-cross-origin");
-                headers.add("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
-                
-                // CORS 헤더 (필요시)
-                if (!headers.containsKey("Access-Control-Allow-Origin")) {
-                    headers.add("Access-Control-Allow-Origin", "*");
-                }
-                if (!headers.containsKey("Access-Control-Allow-Methods")) {
-                    headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-                }
-                if (!headers.containsKey("Access-Control-Allow-Headers")) {
-                    headers.add("Access-Control-Allow-Headers", "*");
-                }
-            }));
+        // 응답이 커밋되기 전에 보안 헤더 추가
+        ServerHttpResponse response = exchange.getResponse();
+        HttpHeaders headers = response.getHeaders();
+        
+        // 보안 헤더 추가
+        headers.add("X-Content-Type-Options", "nosniff");
+        headers.add("X-Frame-Options", "DENY");
+        headers.add("X-XSS-Protection", "1; mode=block");
+        headers.add("Referrer-Policy", "strict-origin-when-cross-origin");
+        headers.add("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+        
+        // 체인 실행
+        return chain.filter(exchange);
     }
 
     @Override

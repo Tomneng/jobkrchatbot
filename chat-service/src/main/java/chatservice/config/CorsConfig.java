@@ -4,10 +4,11 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-@Configuration
+// API Gateway에서 CORS를 처리하므로 Chat Service의 CORS 설정은 비활성화
+// @Configuration
 public class CorsConfig implements WebMvcConfigurer {
 
-    @Override
+    // @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
                 .allowedOrigins(

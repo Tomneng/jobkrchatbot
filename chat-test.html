@@ -301,23 +301,36 @@
         async function checkConnection() {
             try {
                 // API Gateway를 통해 채팅 서비스 연결 확인
-                const chatResponse = await fetch('http://localhost:8080/api/chat/llm-service-url');
+                const chatResponse = await fetch('http://localhost:8080/api/chat/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        userId: 'connection-test'
+                    })
+                });
+                
                 if (chatResponse.ok) {
                     updateConnectionStatus('API Gateway & Chat Service 연결됨', 'connected');
+                    
+                    // 응답에서 chatRoomId 추출하여 LLM 서비스 연결 확인
+                    const chatData = await chatResponse.json();
+                    const chatRoomId = chatData.id;
+                    
+                    // LLM 서비스 연결 확인 (실제 존재하는 엔드포인트 사용)
+                    try {
+                        const llmResponse = await fetch(`http://localhost:8080/api/llm/stream/${chatRoomId}`);
+                        if (llmResponse.ok || llmResponse.status === 405) {
+                            updateConnectionStatus('API Gateway & 모든 서비스 연결됨', 'connected');
+                        } else {
+                            updateConnectionStatus(`Chat Service 연결됨, LLM Service 연결 실패 (${llmResponse.status})`, 'error');
+                        }
+                    } catch (llmError) {
+                        updateConnectionStatus('Chat Service 연결됨, LLM Service 연결 실패', 'error');
+                    }
                 } else {
                     updateConnectionStatus(`API Gateway 연결 실패 (${chatResponse.status})`, 'error');
-                }
-
-                // API Gateway를 통해 LLM 서비스 연결 확인
-                try {
-                    const llmResponse = await fetch('http://localhost:8080/api/llm/stream/test');
-                    if (llmResponse.ok || llmResponse.status === 405) { // 405는 Method Not Allowed (GET 요청이므로 정상)
-                        updateConnectionStatus('API Gateway & 모든 서비스 연결됨', 'connected');
-                    } else {
-                        updateConnectionStatus(`LLM Service 연결 실패 (${llmResponse.status})`, 'error');
-                    }
-                } catch (llmError) {
-                    updateConnectionStatus('Chat Service 연결됨, LLM Service 연결 실패', 'error');
                 }
             } catch (error) {
                 console.error('연결 확인 오류:', error);
