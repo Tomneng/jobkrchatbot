@@ -44,5 +44,5 @@ claude:
 
 logging:
   level:
-    backend.jobkrchatbot.llmservice: DEBUG
-    org.springframework.kafka: DEBUG
+    backend.jobkrchatbot.llmservice: INFO
+    org.springframework.kafka: WARN

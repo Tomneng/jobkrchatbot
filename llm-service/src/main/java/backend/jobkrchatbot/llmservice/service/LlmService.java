@@ -229,14 +229,11 @@ public class LlmService {
     
     private void handleChunk(SseEmitter emitter, StringBuilder fullResponse, String chunk) {
         try {
-            log.info("Claude API에서 청크 수신: '{}'", chunk);
-            
             emitter.send(SseEmitter.event()
                 .name("chunk")
                 .data(chunk));
             
             fullResponse.append(chunk);
-            log.info("청크 전송 완료: '{}'", chunk);
         } catch (IOException e) {
             log.error("Error sending chunk via SSE", e);
         }

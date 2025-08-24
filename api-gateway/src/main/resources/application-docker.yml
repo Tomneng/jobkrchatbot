@@ -166,9 +166,9 @@ management:
 # Logging 설정
 logging:
   level:
-    org.springframework.cloud.gateway: DEBUG
-    org.springframework.web.reactive: DEBUG
-    reactor.netty: DEBUG
-    backend.jobkrchatbot.apigateway: DEBUG
+    org.springframework.cloud.gateway: INFO
+    org.springframework.web.reactive: INFO
+    reactor.netty: WARN
+    backend.jobkrchatbot.apigateway: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

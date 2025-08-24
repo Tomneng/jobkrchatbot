@@ -53,7 +53,7 @@ llm:
 
 logging:
   level:
-    chatservice: DEBUG
-    org.springframework.kafka: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    chatservice: INFO
+    org.springframework.kafka: WARN
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN

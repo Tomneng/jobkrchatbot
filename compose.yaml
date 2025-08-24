@@ -62,6 +62,13 @@ services:
       # 로그 레벨 설정
       KAFKA_LOG4J_ROOT_LOGLEVEL: WARN
       KAFKA_LOG4J_LOGGERS: "kafka.controller=WARN,state.change.logger=WARN"
+      # 로그 보관 정책 설정 (디스크 공간 절약)
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_LOG_RETENTION_BYTES: 1073741824
+      KAFKA_LOG_SEGMENT_BYTES: 104857600
+      KAFKA_LOG_CLEANUP_POLICY: delete
+      KAFKA_LOG_CLEANER_ENABLE: 'true'
+      KAFKA_LOG_CLEANER_DELETE_RETENTION_MS: 86400000
     volumes:
       - kafka1-data:/var/lib/kafka/data
     # 로그 드라이버 설정
@@ -106,6 +113,13 @@ services:
       # 로그 레벨 설정
       KAFKA_LOG4J_ROOT_LOGLEVEL: WARN
       KAFKA_LOG4J_LOGGERS: "kafka.controller=WARN,state.change.logger=WARN"
+      # 로그 보관 정책 설정 (디스크 공간 절약)
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_LOG_RETENTION_BYTES: 1073741824
+      KAFKA_LOG_SEGMENT_BYTES: 104857600
+      KAFKA_LOG_CLEANUP_POLICY: delete
+      KAFKA_LOG_CLEANER_ENABLE: 'true'
+      KAFKA_LOG_CLEANER_DELETE_RETENTION_MS: 86400000
     volumes:
       - kafka2-data:/var/lib/kafka/data
     # 로그 드라이버 설정
@@ -156,6 +170,12 @@ services:
       - llm-service
     environment:
       SPRING_PROFILES_ACTIVE: docker
+    # 로그 크기 제한
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - msa-network
 
@@ -196,6 +216,12 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka1:29092,kafka2:29093
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: ${REDIS_PORT}
+    # 로그 크기 제한
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - msa-network
 
@@ -215,6 +241,12 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka1:29092,kafka2:29093
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       CLAUDE_API_KEY: ${CLAUDE_API_KEY}
+    # 로그 크기 제한
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - msa-network
 
