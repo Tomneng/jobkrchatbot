@@ -89,14 +89,6 @@ cd llm-service
 ### LLM Service (8082)
 - `POST /api/llm/chat` - AI 응답 생성
 
-## 모니터링
-
-### Actuator 엔드포인트
-- `/actuator/health` - 전체 시스템 상태
-- `/actuator/gateway` - 게이트웨이 라우트 정보
-- `/actuator/circuitbreakers` - Circuit Breaker 상태
-- `/actuator/ratelimiters` - Rate Limiter 상태
-
 ### 로깅
 - Spring Cloud Gateway: DEBUG 레벨
 - 요청/응답 로깅: 자동으로 모든 요청 기록
