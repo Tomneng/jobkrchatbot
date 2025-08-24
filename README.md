@@ -4,12 +4,8 @@
 Spring Boot 기반의 MSA(Microservice Architecture) 채팅봇 시스템입니다.
 
 ## 아키텍처
-- **API Gateway**: Spring Cloud Gateway를 사용한 통합 게이트웨이
-- **Chat Service**: 채팅 기능을 담당하는 마이크로서비스
-- **LLM Service**: AI 모델과의 통신을 담당하는 마이크로서비스
-- **Kafka**: 메시지 브로커링 및 비동기 통신
-- **PostgreSQL**: 채팅 데이터 저장
-- **Redis**: Rate Limiting 및 캐싱
+<img width="993" height="414" alt="image" src="https://github.com/user-attachments/assets/efa78dd0-8220-402b-b789-a9c38c8f268d" />
+
 
 ## Spring Cloud Gateway 기능
 
