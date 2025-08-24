@@ -50,7 +50,7 @@ CLAUDE_API_KEY=your_claude_api_key
 
 ### 2. Docker Compose로 실행
 ```bash
-docker-compose up -d
+docker-compose up --build -d
 ```
 
 ### 3. 개별 서비스 실행
