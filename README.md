@@ -6,6 +6,11 @@ Spring Boot 기반의 MSA(Microservice Architecture) 채팅봇 시스템입니�
 ## 아키텍처
 <img width="993" height="414" alt="image" src="https://github.com/user-attachments/assets/efa78dd0-8220-402b-b789-a9c38c8f268d" />
 
+각 모듈은 다음과 같은 역할분리에 따라 나누었습니다.
+
+- api-gateway: 해당 어플리케이션 레벨에 도달하는 요청들에 대한 관리 및 라우팅
+- chat-service: 채팅방 및 채팅 관리
+- llm-service: 외부 llm호출 및 응답 기능
 
 ## Spring Cloud Gateway 기능
 
