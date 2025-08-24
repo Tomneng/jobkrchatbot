@@ -36,11 +36,7 @@ public class ChatController {
         chatApplicationService.sendStreamingMessage(request);
         return ResponseEntity.ok().build();
     }
-    
-    // LLM 서비스 URL은 이제 API Gateway를 통해 접근
-    // 기존 프록시 엔드포인트는 API Gateway로 이동됨
 
-    
     @GetMapping("/{chatRoomId}/history")
     public ResponseEntity<ChatHistoryResponse> getChatHistory(@PathVariable String chatRoomId) {
         log.info("Getting chat history for room: {}", chatRoomId);

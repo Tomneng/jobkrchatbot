@@ -33,18 +33,7 @@ public class KafkaMessagePublisher implements MessagePublisher {
         kafkaTemplate.send(CHAT_EVENTS_TOPIC, chatRoomId, eventData);
         log.info("Chat event published: {} for chat room: {}", eventType, chatRoomId);
     }
-    
-    @Override
-    public void publishUserMessage(String chatRoomId, String requestId, String message) {
-        Map<String, Object> messageData = Map.of(
-            "chatRoomId", chatRoomId,
-            "requestId", requestId,
-            "message", message
-        );
-        
-        kafkaTemplate.send(USER_MESSAGES_TOPIC, chatRoomId, messageData);
-        log.info("User message published to Kafka: chatRoom={}, requestId={}", chatRoomId, requestId);
-    }
+
     
     @Override
     public void publishLlmRequest(LlmRequest llmRequest) {
